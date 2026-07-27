@@ -19,6 +19,7 @@ import {
   AutoModerationRuleKeywordPresetType,
   AutoModerationActionType,
   AutoModerationRuleTriggerType,
+  AuditLogEvent,
   ChannelSelectMenuBuilder,
   AttachmentBuilder,
   type Interaction,
@@ -833,9 +834,9 @@ export function createBotClient(): Client | null {
     }
   });
 
-  const XP_COOLDOWN_MS = 5_000;
-  const XP_MIN = 2;
-  const XP_MAX = 4;
+  const XP_COOLDOWN_MS = 60_000;  // 1 message per minute earns XP — prevents spam leveling
+  const XP_MIN = 5;
+  const XP_MAX = 15;
 
   // Deduplicate Discord event re-deliveries — key is message ID, clears after 30s
   const _processedMsgIds = new Set<string>();
@@ -900,9 +901,16 @@ export function createBotClient(): Client | null {
         const newLevel = computeLevel(newEntry.xp).level;
 
         if (newLevel > oldLevel && newLevel >= 1 && newLevel <= 100) {
-          const lvlCh = msg.guild.channels.cache.get(LEVELUP_CHANNEL_ID) as TextChannel | null;
+          let lvlCh = msg.guild.channels.cache.get(LEVELUP_CHANNEL_ID) as TextChannel | null;
+          if (!lvlCh) {
+            lvlCh = await msg.guild.channels.fetch(LEVELUP_CHANNEL_ID).catch(() => null) as TextChannel | null;
+          }
           if (lvlCh) {
-            await lvlCh.send({ content: `<@${msg.author.id}> has reached level **${newLevel}**. GG!` }).catch(() => {});
+            await lvlCh.send({
+              content: `🎉 <@${msg.author.id}> just leveled up to **Level ${newLevel}**! GG! 🎊`,
+            }).catch((e) => logger.warn({ err: e }, "Level-up message failed to send"));
+          } else {
+            logger.warn({ channelId: LEVELUP_CHANNEL_ID }, "Level-up channel not found");
           }
         }
 
@@ -944,8 +952,9 @@ export function createBotClient(): Client | null {
           return;
         }
 
-        // ── Non-GIF link filter (only tenor/giphy/discord GIF links are allowed) ──
-        if (hasDisallowedLink(msg.content)) {
+        // ── Non-GIF link filter (skipped inside ticket channels — tickets allow all links/files) ──
+        const isTicketChannel = !!storage.getTicket(msg.channelId);
+        if (!isTicketChannel && hasDisallowedLink(msg.content)) {
           await msg.delete().catch(() => {});
           void applyProgressivePunishment(
             msg.guild,
@@ -1029,6 +1038,9 @@ export function createBotClient(): Client | null {
         spamTracker.set(msg.author.id, recent);
 
         if (recent.length >= spamCfg.spamThreshold) {
+          // Auto-delete the triggering spam message immediately
+          await msg.delete().catch(() => {});
+
           const lastAlert = spamCooldown.get(msg.author.id) ?? 0;
           if (now - lastAlert >= SPAM_ALERT_CD_MS) {
             spamCooldown.set(msg.author.id, now);
@@ -1086,6 +1098,7 @@ export function createBotClient(): Client | null {
 
     // ── !-prefix message commands ──
     if (msg.content.startsWith("!")) {
+
       void (async () => {
         const args = msg.content.slice(1).trim().split(/\s+/);
         const cmd  = args[0]?.toLowerCase();
@@ -1120,6 +1133,53 @@ export function createBotClient(): Client | null {
       } finally {
         stickyBusy.delete(msg.channelId);
       }
+    })();
+  });
+
+  // ── Mod-log deletion guard ───────────────────────────────────────────────────
+  // When any message is deleted from the automod log channel, immediately restore
+  // it and ping the person who deleted it. Nobody — including owners — can wipe
+  // mod-log entries permanently.
+  const PROTECTED_LOG_CHANNELS = new Set([MOD_LOG_CHANNEL_ID, SPAM_LOG_CHANNEL_ID]);
+
+  client.on("messageDelete", (msg) => {
+    void (async () => {
+      if (!PROTECTED_LOG_CHANNELS.has(msg.channelId)) return;
+      const guild = msg.guild;
+      if (!guild) return;
+      // Don't react to the bot's own bulk-delete (e.g. /purge in log channel)
+      // but DO react to individual manual deletions.
+
+      // Attempt to identify who deleted the message via audit log
+      await new Promise((r) => setTimeout(r, 1000)); // brief delay for audit log propagation
+      const auditLogs = await guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 3 }).catch(() => null);
+      const entry = auditLogs?.entries.find(
+        (e) =>
+          e.target?.id === msg.author?.id &&
+          Date.now() - e.createdTimestamp < 5000,
+      );
+      const deleterId = entry?.executor?.id;
+
+      const logCh = guild.channels.cache.get(msg.channelId) as TextChannel | null;
+      if (!logCh) return;
+
+      const alertLine = deleterId
+        ? `⚠️ **MODERATOR <@${deleterId}> HAS DELETED A MODLOG ENTRY.** The message has been restored below.`
+        : `⚠️ **A MODLOG ENTRY WAS DELETED.** The message has been restored below.`;
+
+      // Rebuild the message — partial messages may not have content/embeds
+      if (msg.partial) {
+        await logCh.send({ content: alertLine }).catch(() => {});
+        return;
+      }
+
+      const restoredEmbeds = msg.embeds.length > 0 ? msg.embeds.slice(0, 10) : [];
+      const restoredFiles = msg.attachments.map((a) => a.url);
+
+      await logCh.send({
+        content: alertLine + (msg.content ? `\n${msg.content}` : ""),
+        embeds: restoredEmbeds,
+      }).catch(() => {});
     })();
   });
 
@@ -1314,10 +1374,14 @@ async function registerCommands(client: Client) {
       ),
     new SlashCommandBuilder()
       .setName("purge")
-      .setDescription("Bulk delete messages from this channel (staff only)")
+      .setDescription("Bulk delete messages from this channel (staff only — helpers max 10, others max 100)")
       .addIntegerOption((o) =>
-        o.setName("amount").setDescription("Number of messages to delete (1–100)").setRequired(true).setMinValue(1).setMaxValue(100),
+        o.setName("amount").setDescription("Number of messages to delete (1–100; helpers limited to 10)").setRequired(true).setMinValue(1).setMaxValue(100),
       ),
+    new SlashCommandBuilder()
+      .setName("requestinvite")
+      .setDescription("Request to invite a user into this ticket (ticket channels only)")
+      .addUserOption((o) => o.setName("user").setDescription("User to invite").setRequired(true)),
     new SlashCommandBuilder()
       .setName("level")
       .setDescription("View your rank card and XP progress")
@@ -1485,43 +1549,76 @@ async function setupAutoMod(guild: Guild) {
     return;
   }
   const existing = await guild.autoModerationRules.fetch();
-  if (!existing.some((r) => r.name === "Bot – Keyword Filter")) {
-    await guild.autoModerationRules
-      .create({
-        name: "Bot – Keyword Filter",
-        eventType: 1,
-        triggerType: AutoModerationRuleTriggerType.Keyword,
-        triggerMetadata: {
-          keywordFilter: ["retard", "retarded", "bastard", "nigger", "nigga"],
-          regexPatterns: [],
-          presets: [
-            AutoModerationRuleKeywordPresetType.Profanity,
-            AutoModerationRuleKeywordPresetType.SexualContent,
-            AutoModerationRuleKeywordPresetType.Slurs,
-          ],
-        },
-        actions: [
-          { type: AutoModerationActionType.BlockMessage, metadata: { customMessage: "Your message was blocked." } },
-        ],
-        enabled: true,
-        reason: "Bot AutoMod",
-      })
-      .catch((e) => logger.warn({ err: e, guild: guild.name }, "Failed to create keyword AutoMod rule"));
+  const keywordActions = [
+    { type: AutoModerationActionType.BlockMessage, metadata: { customMessage: "🚫 Your message was blocked by AutoMod. Hate speech and slurs are not tolerated." } },
+    { type: AutoModerationActionType.SendAlertMessage, metadata: { channel: MOD_LOG_CHANNEL_ID } },
+  ] as const;
+
+  const mentionActions = [
+    { type: AutoModerationActionType.BlockMessage, metadata: { customMessage: "🚫 Too many mentions in one message." } },
+    { type: AutoModerationActionType.SendAlertMessage, metadata: { channel: MOD_LOG_CHANNEL_ID } },
+  ] as const;
+
+  const keywordMeta = {
+    keywordFilter: [
+      "nigger", "niggers", "nigga", "niggas",
+      "retard", "retarded", "retards",
+      "bastard", "faggot", "faggots", "fag",
+      "kike", "kikes", "spic", "spics",
+      "chink", "chinks", "wetback", "wetbacks",
+    ],
+    regexPatterns: [
+      "n[i1!|/\\\\]+[g9]+[e3a@4]+[rz]?s?",
+      "r[e3@]+t[a4@]+rd(ed|s)?",
+      "f[a4@]+[g9]+[o0]?[t7]?s?",
+    ],
+    presets: [
+      AutoModerationRuleKeywordPresetType.Profanity,
+      AutoModerationRuleKeywordPresetType.SexualContent,
+      AutoModerationRuleKeywordPresetType.Slurs,
+    ],
+  };
+
+  // ── Keyword filter: delete old bot rule then recreate ──
+  const existingKeyword = existing.find((r) => r.name === "Bot – Keyword Filter");
+  if (existingKeyword) {
+    await existingKeyword.edit({
+      triggerMetadata: keywordMeta,
+      actions: keywordActions,
+      enabled: true,
+      reason: "Bot AutoMod refresh",
+    }).catch((e) => logger.warn({ err: e, guild: guild.name }, "Failed to update keyword AutoMod rule"));
+  } else {
+    await guild.autoModerationRules.create({
+      name: "Bot – Keyword Filter",
+      eventType: 1,
+      triggerType: AutoModerationRuleTriggerType.Keyword,
+      triggerMetadata: keywordMeta,
+      actions: keywordActions,
+      enabled: true,
+      reason: "Bot AutoMod",
+    }).catch((e) => logger.warn({ err: e, guild: guild.name }, "Failed to create keyword AutoMod rule"));
   }
-  if (!existing.some((r) => r.name === "Bot – Mention Spam")) {
-    await guild.autoModerationRules
-      .create({
-        name: "Bot – Mention Spam",
-        eventType: 1,
-        triggerType: AutoModerationRuleTriggerType.MentionSpam,
-        triggerMetadata: { mentionTotalLimit: 6, mentionRaidProtectionEnabled: true },
-        actions: [
-          { type: AutoModerationActionType.BlockMessage, metadata: { customMessage: "Too many mentions." } },
-        ],
-        enabled: true,
-        reason: "Bot AutoMod",
-      })
-      .catch((e) => logger.warn({ err: e, guild: guild.name }, "Failed to create mention-spam AutoMod rule"));
+
+  // ── Mention spam: update if exists, create if not (only 1 allowed per server) ──
+  const existingMention = existing.find((r) => r.triggerType === AutoModerationRuleTriggerType.MentionSpam);
+  if (existingMention) {
+    await existingMention.edit({
+      triggerMetadata: { mentionTotalLimit: 4, mentionRaidProtectionEnabled: true },
+      actions: mentionActions,
+      enabled: true,
+      reason: "Bot AutoMod refresh",
+    }).catch((e) => logger.warn({ err: e, guild: guild.name }, "Failed to update mention-spam AutoMod rule"));
+  } else {
+    await guild.autoModerationRules.create({
+      name: "Bot – Mention Spam",
+      eventType: 1,
+      triggerType: AutoModerationRuleTriggerType.MentionSpam,
+      triggerMetadata: { mentionTotalLimit: 4, mentionRaidProtectionEnabled: true },
+      actions: mentionActions,
+      enabled: true,
+      reason: "Bot AutoMod",
+    }).catch((e) => logger.warn({ err: e, guild: guild.name }, "Failed to create mention-spam AutoMod rule"));
   }
 }
 
@@ -1535,9 +1632,27 @@ async function handleInteraction(i: Interaction) {
 
 // ── Custom content filters (run on every message, all channels) ──────────────
 const BAD_WORD_PATTERNS: RegExp[] = [
-  /r[e3]+t[a4@]+rd(ed)?/i,
-  /n[i1!|]+g+[e3a@4]+r?/i,
-  /b[a4@]+st[a4@]+rd/i,
+  // retard variants
+  /\br[e3@]+t[a4@]+rd(ed|s)?\b/i,
+  // n-word (hard-r and soft-a) — many leet-speak substitutions
+  /\bn[i1!|\/\\]+[g9]+[e3a@4]+[rz]?s?\b/i,
+  /\bn[i1!|\/\\]+[g9]{2,}[a@4]+s?\b/i,
+  // bastard
+  /\bb[a4@]+st[a4@]+rd\b/i,
+  // f-slur (faggot/fag)
+  /\bf[a4@]+[g9]+[o0]?[t7]?s?\b/i,
+  // c-word
+  /\bc[u\*]+n+t+s?\b/i,
+  // k-slur (kike)
+  /\bk[i1]+k[e3]+s?\b/i,
+  // sp-slur (spic/spik)
+  /\bsp[i1]+[ck]+s?\b/i,
+  // cracker (as slur)
+  /\bcr[a@4]+ck[e3]+r+s?\b/i,
+  // wetback
+  /\bw[e3]+t[\s\-_]?b[a4]+ck\b/i,
+  // chink
+  /\bch[i1]+nk+s?\b/i,
 ];
 
 function containsBadWord(content: string): boolean {
@@ -2357,11 +2472,24 @@ async function handleCommand(i: ChatInputCommandInteraction) {
   }
 
   if (commandName === "purge") {
-    if (!isStaff(i.member as GuildMember)) {
+    const member = i.member as GuildMember;
+    if (!isStaff(member)) {
       await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return;
     }
     if (!channel || !guild) return;
     const amount = i.options.getInteger("amount", true);
+
+    // Tiered purge limit: Mod 1 (Helper) can only delete up to 10 messages
+    const isHelper = MOD_ROLE_IDS[0] !== undefined && member.roles.cache.has(MOD_ROLE_IDS[0]) && !isMod(member) && !isOwnerOrCoOwner(member);
+    const maxAllowed = isHelper ? 10 : 100;
+    if (amount > maxAllowed) {
+      await i.reply({
+        embeds: [errEmbed(`You can only purge up to **${maxAllowed}** messages${isHelper ? " (Helper limit)" : ""}.`)],
+        flags: 64,
+      });
+      return;
+    }
+
     if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
     const fetched = await (channel as TextChannel).messages.fetch({ limit: amount });
     const deleted = await (channel as TextChannel).bulkDelete(fetched, true).catch(() => null);
@@ -2373,6 +2501,40 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     });
     setTimeout(() => confirm.delete().catch(() => {}), 5000);
     await i.editReply({ content: `✅ Deleted ${count} messages.` });
+    return;
+  }
+
+  if (commandName === "requestinvite") {
+    if (!guild || !channel) return;
+    const ticket = storage.getTicket(channel.id);
+    if (!ticket) {
+      await i.reply({ embeds: [errEmbed("Ticket only — this command can only be used inside a ticket channel.")], flags: 64 });
+      return;
+    }
+    const target = i.options.getUser("user", true);
+    if (target.id === user.id) {
+      await i.reply({ embeds: [errEmbed("You can't invite yourself.")], flags: 64 });
+      return;
+    }
+    const embed = new EmbedBuilder()
+      .setColor(BOT_COLOR)
+      .setTitle("📨 Invite Request")
+      .setDescription(`<@${user.id}> is requesting to add <@${target.id}> to this ticket.`)
+      .addFields(
+        { name: "Requested by", value: `<@${user.id}>`, inline: true },
+        { name: "Invite",       value: `<@${target.id}>`, inline: true },
+      )
+      .setTimestamp();
+    const acceptBtn = new ButtonBuilder()
+      .setCustomId(`requestinvite_accept_${target.id}`)
+      .setLabel("✅ Accept — Add to ticket")
+      .setStyle(ButtonStyle.Success);
+    const denyBtn = new ButtonBuilder()
+      .setCustomId(`requestinvite_deny_${target.id}`)
+      .setLabel("❌ Deny")
+      .setStyle(ButtonStyle.Danger);
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(acceptBtn, denyBtn);
+    await i.reply({ embeds: [embed], components: [row] });
     return;
   }
 
@@ -3421,6 +3583,53 @@ async function handleButton(i: ButtonInteraction) {
     } catch {
       await i.followUp({ embeds: [errEmbed("Could not DM the applicant. They may have DMs disabled.")], flags: 64 });
     }
+    return;
+  }
+
+  // ── /requestinvite accept/deny ────────────────────────────────────────────
+  if (customId.startsWith("requestinvite_accept_") || customId.startsWith("requestinvite_deny_")) {
+    if (!guild || !i.channel) return;
+    const member = i.member as GuildMember;
+    if (!isStaff(member)) {
+      await i.reply({ embeds: [errEmbed("Only staff can accept or deny invite requests.")], flags: 64 });
+      return;
+    }
+    const targetId = customId.startsWith("requestinvite_accept_")
+      ? customId.slice("requestinvite_accept_".length)
+      : customId.slice("requestinvite_deny_".length);
+    const isDeny = customId.startsWith("requestinvite_deny_");
+
+    if (isDeny) {
+      await i.update({
+        embeds: [
+          ...(i.message.embeds ?? []),
+          new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`❌ Denied by <@${user.id}>.`),
+        ],
+        components: [],
+      });
+      return;
+    }
+
+    // Accept — add the user to the ticket channel
+    const ticket = storage.getTicket(i.channel.id);
+    if (!ticket) { await i.reply({ embeds: [errEmbed("Not a ticket channel.")], flags: 64 }); return; }
+    const ch = i.channel as TextChannel;
+    await ch.permissionOverwrites.edit(targetId, {
+      ViewChannel: true,
+      SendMessages: true,
+      ReadMessageHistory: true,
+      AttachFiles: true,
+      EmbedLinks: true,
+      UseApplicationCommands: true,
+    }).catch(() => {});
+    await i.update({
+      embeds: [
+        ...(i.message.embeds ?? []),
+        new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ <@${targetId}> has been added to the ticket by <@${user.id}>.`),
+      ],
+      components: [],
+    });
+    await ch.send({ content: `👋 <@${targetId}> has been invited into this ticket by <@${user.id}>.` }).catch(() => {});
     return;
   }
 
