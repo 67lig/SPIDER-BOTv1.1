@@ -84,6 +84,8 @@ const DONUTSMP_API_KEY = process.env["DONUTSMP_API_TOKEN"];
 const ONLINE_COLOR = 0x57f287;
 const OFFLINE_COLOR = 0xed4245;
 const CLAIM_HOURS = 12;
+const QUICKDROP_CLAIM_MINUTES = 10;
+const DOUBLE_CLAIM_MINUTES = 5;
 // BLACKLISTED_ROLE_ID, AUTO_JOIN_ROLE_ID, VOUCH_CHANNEL_IDS_LIST, VOUCH_CHANNEL_ID_PRIMARY,
 // WELCOME_* — all imported from config.ts
 
@@ -112,7 +114,7 @@ function computeLevel(totalXp: number): { level: number; currentXp: number; need
 
 function muteDmEmbed(reason: string, duration: string, moderatorTag: string, guildName: string, warnCount?: number): EmbedBuilder {
   let desc = `**You got muted**\n\n**Reason:** ${reason}\n**Duration:** ${duration}\n**Responsible:** ${moderatorTag}`;
-  if (warnCount !== undefined) desc += `\n**Warnings:** ${warnCount} / 5 — Reaching 5 results in an automatic ban.`;
+  if (warnCount !== undefined) desc += `\n**Warnings:** ${warnCount} / 5. Reaching 5 results in an automatic ban.`;
   return new EmbedBuilder()
     .setColor(0xed4245)
     .setDescription(desc)
@@ -203,7 +205,7 @@ async function applyProgressivePunishment(
   // --- Progressive actions ---
   if (newCount === 1) {
     // 1st: DM warning only
-    user?.send({ embeds: [warnDmEmbed(`${reason} — Continuing will result in a mute.`, newCount, guild.name)] }).catch(() => {});
+    user?.send({ embeds: [warnDmEmbed(`${reason}. Continuing will result in a mute.`, newCount, guild.name)] }).catch(() => {});
   } else if (newCount === 2) {
     // 2nd: 1 minute timeout
     if (member.moderatable) {
@@ -398,11 +400,21 @@ function buildGiveawayEmbed(gw: GiveawayEntry): EmbedBuilder {
   desc += `**Entries:** ${gw.entries.length}\n`;
   desc += `**Hosted by:** <@${gw.hostId}>`;
   if (gw.description) desc += `\n\n${gw.description}`;
+  const isQuickdrop = gw.type === "quickdrop";
+  const isDouble = gw.type === "double";
+  const isSimple = gw.type === "simple";
+  const footerText = isQuickdrop
+    ? `Quickdrop • ID: ${gw.id} • Claim: ${QUICKDROP_CLAIM_MINUTES} min`
+    : isDouble
+      ? `Giveaway • ID: ${gw.id} • Claim: ${DOUBLE_CLAIM_MINUTES} min`
+      : isSimple
+        ? `Giveaway (No Claim) • ID: ${gw.id}`
+        : `Giveaway • ID: ${gw.id}`;
   return new EmbedBuilder()
-    .setColor(0xf47bff)
+    .setColor(isQuickdrop ? 0xff8c00 : 0xf47bff)
     .setTitle(gw.prize)
     .setDescription(desc)
-    .setFooter({ text: `Giveaway • ID: ${gw.id}` })
+    .setFooter({ text: footerText })
     .setTimestamp(new Date(gw.endTime));
 }
 
@@ -416,11 +428,21 @@ function buildGiveawayEndedEmbed(gw: GiveawayEntry): EmbedBuilder {
   desc += `**Total Entries:** ${gw.entries.length}\n`;
   desc += `**Hosted by:** <@${gw.hostId}>`;
   if (gw.description) desc += `\n\n${gw.description}`;
+  const isQuickdrop = gw.type === "quickdrop";
+  const isDouble = gw.type === "double";
+  const isSimple = gw.type === "simple";
+  const footerText = isQuickdrop
+    ? `Quickdrop • ID: ${gw.id} • Claim: ${QUICKDROP_CLAIM_MINUTES} min`
+    : isDouble
+      ? `Giveaway • ID: ${gw.id} • Claim: ${DOUBLE_CLAIM_MINUTES} min`
+      : isSimple
+        ? `Giveaway (No Claim) • ID: ${gw.id}`
+        : `Giveaway • ID: ${gw.id}`;
   return new EmbedBuilder()
     .setColor(0x747f8d)
     .setTitle(`${gw.prize} - Ended`)
     .setDescription(desc)
-    .setFooter({ text: `Giveaway • ID: ${gw.id}` })
+    .setFooter({ text: footerText })
     .setTimestamp(new Date(gw.endTime));
 }
 
@@ -501,7 +523,12 @@ async function endGiveaway(gw: GiveawayEntry) {
     return;
   }
 
-  const claimExpiry = new Date(Date.now() + CLAIM_HOURS * 60 * 60 * 1000);
+  const claimMs = updatedGw.type === "quickdrop"
+    ? QUICKDROP_CLAIM_MINUTES * 60 * 1000
+    : updatedGw.type === "double"
+      ? DOUBLE_CLAIM_MINUTES * 60 * 1000
+      : CLAIM_HOURS * 60 * 60 * 1000;
+  const claimExpiry = new Date(Date.now() + claimMs);
   storage.setClaimExpiry(gw.id, claimExpiry.toISOString());
 
   for (const winnerId of winners) {
@@ -663,7 +690,12 @@ export function createBotClient(): Client | null {
 
       // Ensure a claim expiry exists
       if (!gw.claimExpiry) {
-        const expiry = new Date(Date.now() + CLAIM_HOURS * 60 * 60 * 1000);
+        const claimMs = gwType === "quickdrop"
+          ? QUICKDROP_CLAIM_MINUTES * 60 * 1000
+          : gwType === "double"
+            ? DOUBLE_CLAIM_MINUTES * 60 * 1000
+            : CLAIM_HOURS * 60 * 60 * 1000;
+        const expiry = new Date(Date.now() + claimMs);
         storage.setClaimExpiry(gw.id, expiry.toISOString());
       }
 
@@ -907,7 +939,7 @@ export function createBotClient(): Client | null {
           }
           if (lvlCh) {
             await lvlCh.send({
-              content: `🎉 <@${msg.author.id}> just leveled up to **Level ${newLevel}**! GG! 🎊`,
+              content: `<@${msg.author.id}> just leveled up to **Level ${newLevel}**!`,
             }).catch((e) => logger.warn({ err: e }, "Level-up message failed to send"));
           } else {
             logger.warn({ channelId: LEVELUP_CHANNEL_ID }, "Level-up channel not found");
@@ -1968,11 +2000,11 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     const recent = entries.slice(-10).reverse();
     const embed = new EmbedBuilder()
       .setColor(0xed4245)
-      .setAuthor({ name: `Violation History — ${targetUser.username}`, iconURL: targetUser.displayAvatarURL() })
+      .setAuthor({ name: `Violation History: ${targetUser.username}`, iconURL: targetUser.displayAvatarURL() })
       .setDescription(`Showing ${recent.length} of ${entries.length} matching violation(s)${typeFilter ? ` · type: ${typeFilter}` : ""}${days ? ` · last ${days}d` : ""}`)
       .addFields(
         recent.map((e, idx) => ({
-          name: `#${entries.length - idx} — ${e.type} · <t:${Math.floor(new Date(e.timestamp).getTime() / 1000)}:R>`,
+          name: `#${entries.length - idx} · ${e.type} · <t:${Math.floor(new Date(e.timestamp).getTime() / 1000)}:R>`,
           value: `**Reason:** ${e.reason}\n**Content:** ${e.snippet ? e.snippet.slice(0, 200) : "(none)"}`,
         })),
       )
@@ -2125,7 +2157,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       .setDescription(
         warns.length === 0
           ? "No warnings on record."
-          : warns.map((w, idx) => `**${idx + 1}.** ${w.reason}\n> by <@${w.moderatorId}> — <t:${Math.floor(new Date(w.timestamp).getTime() / 1000)}:R>`).join("\n\n"),
+          : warns.map((w, idx) => `**${idx + 1}.** ${w.reason}\n> by <@${w.moderatorId}> · <t:${Math.floor(new Date(w.timestamp).getTime() / 1000)}:R>`).join("\n\n"),
       )
       .setFooter({ text: `${warns.length} / 5 warnings` })
       .setTimestamp();
@@ -2276,7 +2308,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     const humans = g.memberCount - bots;
     const embed = new EmbedBuilder()
       .setColor(BOT_COLOR)
-      .setTitle(`👥 Members — ${g.name}`)
+      .setTitle(`Members: ${g.name}`)
       .setThumbnail(g.iconURL())
       .addFields(
         { name: "Total",  value: `${g.memberCount}`, inline: true },
@@ -2335,7 +2367,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
           .setCustomId("type")
           .setLabel("Type")
           .setStyle(TextInputStyle.Short)
-          .setPlaceholder("normal  |  simple (no claim)  |  double (gamble)")
+          .setPlaceholder("normal  |  simple (no claim)  |  double (take or pass doubled)  |  quickdrop (fast, 30s-1h)")
           .setRequired(false),
       ),
       new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -2366,7 +2398,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     const endTs = Math.floor(new Date(gw.endTime).getTime() / 1000);
     const status = gw.ended ? "Ended" : "Active";
     const statusColor = gw.ended ? 0x747f8d : 0xf47bff;
-    const typeLabel = gw.type === "simple" ? "Simple (no claim)" : gw.type === "double" ? "Double (gamble)" : "Normal";
+    const typeLabel = gw.type === "simple" ? "Simple (no claim)" : gw.type === "double" ? "Double (take or pass doubled)" : gw.type === "quickdrop" ? "Quickdrop (10 min claim)" : "Normal";
     const winnersStr = gw.winners.length > 0 ? gw.winners.map((id) => `<@${id}>`).join(", ") : "None yet";
     const claimedStr = gw.claimedBy.length > 0 ? gw.claimedBy.map((id) => `<@${id}>`).join(", ") : "None";
     const entriesStr = gw.entries.length > 0
@@ -2420,7 +2452,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     const eligible = pool.length > 0 ? pool : gw.entries;
     const newWinner = eligible[Math.floor(Math.random() * eligible.length)];
     const ch = i.channel as TextChannel;
-    await ch.send({ content: `🎉 Reroll! Congratulations <@${newWinner}>, you won **${gw.prize}**!` });
+    await ch.send({ content: `Reroll! Congratulations <@${newWinner}>, you won **${gw.prize}**!` });
     await i.editReply({ embeds: [new EmbedBuilder().setColor(BOT_COLOR).setDescription(`New winner: <@${newWinner}>`)] });
     return;
   }
@@ -2527,7 +2559,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       .setTimestamp();
     const acceptBtn = new ButtonBuilder()
       .setCustomId(`requestinvite_accept_${target.id}`)
-      .setLabel("✅ Accept — Add to ticket")
+      .setLabel("Accept - Add to ticket")
       .setStyle(ButtonStyle.Success);
     const denyBtn = new ButtonBuilder()
       .setCustomId(`requestinvite_deny_${target.id}`)
@@ -2570,7 +2602,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
         { name: "LEVEL", value: `**${level}**`, inline: true },
         { name: "TOTAL XP", value: `**${totalXp.toLocaleString()} XP**`, inline: true },
         {
-          name: `XP Progress — ${pct}%`,
+          name: `XP Progress (${pct}%)`,
           value: `\`${bar}\`\n**${currentXp.toLocaleString()}** / **${neededXp.toLocaleString()} XP** to level **${level + 1}**`,
           inline: false,
         },
@@ -3423,9 +3455,9 @@ async function handleButton(i: ButtonInteraction) {
         .setTitle("Giveaway Claim Ticket")
         .setDescription(`A giveaway claim ticket has been opened.`)
         .addFields(
-          { name: "✅ Winner",     value: `<@${user.id}>`, inline: true },
-          { name: "🎉 Prize",      value: gw.prize,        inline: true },
-          { name: "🎲 ID",         value: `\`${gw.id}\``,  inline: true },
+          { name: "Winner",  value: `<@${user.id}>`, inline: true },
+          { name: "Prize",   value: gw.prize,        inline: true },
+          { name: "ID",      value: `\`${gw.id}\``,  inline: true },
           { name: "Staff In Ticket", value: "0",           inline: true },
         )
         
@@ -3539,16 +3571,16 @@ async function handleButton(i: ButtonInteraction) {
       const dm = await applicant.createDM();
       await dm.send({
         content:
-          `**Congratulations — Your Application Has Been Accepted!**\n\n` +
+          `**Congratulations, your application has been accepted!**\n\n` +
           `We're thrilled to welcome you to the **Spiderman** staff team!\n\n` +
           `A member of leadership will be reaching out to you shortly with next steps and everything you need to get started. ` +
           `In the meantime, please make sure you're active in the server and ready to begin.\n\n` +
-          `Welcome aboard — we're excited to have you. 🏆`,
+          `Welcome aboard, we're excited to have you.`,
       });
       await i.editReply({
         embeds: [
           ...(i.message.embeds ?? []),
-          new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`✅ **Accepted** by <@${user.id}> — applicant has been notified.`),
+          new EmbedBuilder().setColor(SUCCESS_COLOR).setDescription(`**Accepted** by <@${user.id}>. Applicant has been notified.`),
         ],
         components: [],
       });
@@ -3566,9 +3598,9 @@ async function handleButton(i: ButtonInteraction) {
       const dm = await applicant.createDM();
       await dm.send({
         content:
-          `**Regarding Your Staff Application — Spiderman**\n\n` +
+          `**Regarding Your Staff Application - Spiderman**\n\n` +
           `After careful review, we've decided not to move forward with your application at this time.\n\n` +
-          `Please don't be discouraged — this isn't a permanent decision. ` +
+          `Please don't be discouraged, this isn't a permanent decision. ` +
           `You are welcome to reapply in **1 week**, and we encourage you to use that time to stay active, ` +
           `engage with the community, and continue growing.\n\n` +
           `Thank you for your interest in the team. We genuinely appreciate the effort you put into applying.`,
@@ -3576,7 +3608,7 @@ async function handleButton(i: ButtonInteraction) {
       await i.editReply({
         embeds: [
           ...(i.message.embeds ?? []),
-          new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`❌ **Denied** by <@${user.id}> — applicant has been notified.`),
+          new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`**Denied** by <@${user.id}>. Applicant has been notified.`),
         ],
         components: [],
       });
@@ -4592,14 +4624,23 @@ async function handleModal(i: ModalSubmitInteraction) {
     const durationStr = i.fields.getTextInputValue("duration").trim();
     const winnersStr = i.fields.getTextInputValue("winners").trim();
     const typeRaw = i.fields.getTextInputValue("type").trim().toLowerCase();
-    const gwType: "normal" | "simple" | "double" =
-      typeRaw === "simple" ? "simple" : typeRaw === "double" ? "double" : "normal";
+    const gwType: "normal" | "simple" | "double" | "quickdrop" =
+      typeRaw === "simple" ? "simple" : typeRaw === "double" ? "double" : typeRaw === "quickdrop" ? "quickdrop" : "normal";
     const description = i.fields.getTextInputValue("description").trim();
 
     const durationMs = parseDuration(durationStr);
     if (!durationMs) {
       await i.reply({ embeds: [errEmbed("Invalid duration. Use formats like `1h`, `30m`, `1d`, `2h30m`.")], flags: 64 });
       return;
+    }
+
+    if (gwType === "quickdrop") {
+      const minMs = 30_000;           // 30 seconds
+      const maxMs = 60 * 60 * 1000;  // 1 hour
+      if (durationMs < minMs || durationMs > maxMs) {
+        await i.reply({ embeds: [errEmbed("Quickdrop duration must be between **30 seconds** and **1 hour**.")], flags: 64 });
+        return;
+      }
     }
 
     const winnersCount = parseInt(winnersStr, 10);
@@ -5349,14 +5390,14 @@ function getSkellyPriceText(): string {
     const s = key ? spawners[key] : null;
     const price = s?.sellPrice ?? "—";
     const stock = s?.stock ?? 0;
-    lines.push(`• ${name} Spawners — ${price} each | Amount: ${stock}`);
+    lines.push(`• ${name} Spawners: ${price} each | Amount: ${stock}`);
   }
   lines.push("", "**Buying:**");
   for (const name of BUY_SPAWNERS) {
     const key = Object.keys(spawners).find((k) => k.toLowerCase() === name.toLowerCase());
     const s = key ? spawners[key] : null;
     const price = s?.buyPrice ?? "—";
-    lines.push(`• ${name} Spawners — ${price} each`);
+    lines.push(`• ${name} Spawners: ${price} each`);
   }
   lines.push("", "**Notes:**", "Our prices are possibly negotiable", "5x5 minimum", "1 spawner minimum");
   return lines.join("\n");

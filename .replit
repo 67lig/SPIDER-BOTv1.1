@@ -32,5 +32,5 @@ BOT_ENABLED = "1"
 [userenv.production]
 
 [[ports]]
-localPort = 8080
+localPort = 5000
 externalPort = 80

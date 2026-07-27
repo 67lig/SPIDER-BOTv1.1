@@ -116,7 +116,7 @@ export interface GiveawayEntry {
   claimedBy: string[];
   claimExpiry: string | null;
   winMessages: Record<string, string>;
-  type: "normal" | "simple" | "double";
+  type: "normal" | "simple" | "double" | "quickdrop";
 }
 
 export interface XpEntry {
