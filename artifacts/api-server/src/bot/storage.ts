@@ -179,6 +179,14 @@ interface BotData {
   reactionRoles: Record<string, ReactionRoleEntry>;
   automod: AutomodConfig;
   violationLog: Record<string, ViolationLogEntry[]>;
+  invites: {
+    byInviter: Record<string, { joins: number; leaves: number }>;
+    byInvitee: Record<string, string>; // inviteeId → inviterId
+  };
+  counting: {
+    current: number;    // next expected number (starts at 1)
+    lastUserId: string; // user who sent the last correct number
+  };
 }
 
 // Store data OUTSIDE the workspace so it is never overwritten by deployments or git.
@@ -218,6 +226,8 @@ function defaultData(): BotData {
       spamWindowMs: 8_000,
     },
     violationLog: {},
+    invites: { byInviter: {}, byInvitee: {} },
+    counting: { current: 1, lastUserId: "" },
     spawners: {
       "Skeleton":   { buyPrice: "4.1m", sellPrice: "5m",  stock: 0 },
       "Creeper":    { buyPrice: "5m",   sellPrice: "8m",  stock: 0 },
@@ -778,5 +788,46 @@ export const storage = {
 
   getAllReactionRoles(): ReactionRoleEntry[] {
     return Object.values(_data.reactionRoles ?? {});
+  },
+
+  // ── Invite tracker ───────────────────────────────────────────────────────
+  recordInviteJoin(inviteeId: string, inviterId: string): { joins: number; leaves: number } {
+    if (!_data.invites) _data.invites = { byInviter: {}, byInvitee: {} };
+    _data.invites.byInvitee[inviteeId] = inviterId;
+    const stats = _data.invites.byInviter[inviterId] ?? { joins: 0, leaves: 0 };
+    stats.joins += 1;
+    _data.invites.byInviter[inviterId] = stats;
+    saveData(_data);
+    return stats;
+  },
+
+  recordInviteLeave(inviteeId: string): { inviterId: string; valid: number } | null {
+    if (!_data.invites) return null;
+    const inviterId = _data.invites.byInvitee[inviteeId];
+    if (!inviterId) return null;
+    const stats = _data.invites.byInviter[inviterId] ?? { joins: 0, leaves: 0 };
+    stats.leaves = Math.min(stats.leaves + 1, stats.joins);
+    _data.invites.byInviter[inviterId] = stats;
+    delete _data.invites.byInvitee[inviteeId];
+    saveData(_data);
+    return { inviterId, valid: stats.joins - stats.leaves };
+  },
+
+  getInviterValid(inviterId: string): number {
+    const stats = _data.invites?.byInviter[inviterId];
+    if (!stats) return 0;
+    return Math.max(0, stats.joins - stats.leaves);
+  },
+
+  // ── Counting channel ─────────────────────────────────────────────────────
+  getCountingState(): { current: number; lastUserId: string } {
+    return _data.counting ?? { current: 1, lastUserId: "" };
+  },
+
+  setCountingState(current: number, lastUserId: string): void {
+    if (!_data.counting) _data.counting = { current: 1, lastUserId: "" };
+    _data.counting.current = current;
+    _data.counting.lastUserId = lastUserId;
+    saveData(_data);
   },
 };

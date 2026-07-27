@@ -1,39 +1,63 @@
+// ── Owner ─────────────────────────────────────────────────────────────────────
+export const OWNER_IDS: string[] = [
+  "1239041489779298358",
+  "1491457883219693720",
+];
+// Primary owner ID (kept for places that need a single value)
 export const OWNER_ID = "1491457883219693720";
-export const OWNER_ROLE_ID  = "1450662192365047827";
-export const CO_OWNER_ROLE_ID = "1520870585977147434";
-export const BUILD_TICKET_ROLE_ID = "1518626190813040752";
-export const GIVEAWAY_ROLE_ID = "1520289562637635624";
-export const TICKET_LOG_CHANNEL_ID = "1522332345007603813";
-export const TRANSCRIPT_CHANNEL_ID = "1521690926387564644";
-export const GENERAL_TICKET_ROLE_ID = "1475730171058323623";
-export const SKELLY_TICKET_ROLE_ID = "1520650191139504235";
-export const STAFF_APP_RESPONSES_CHANNEL_ID = "1520891416094707732";
-export const LEVELUP_CHANNEL_ID = "1475718052636262531";
-export const SPAM_LOG_CHANNEL_ID = "1520978728975597671";
-export const MOD_LOG_CHANNEL_ID = "1520978728975597671";
 
-export const PAYMENT_PARTNER_IGN = "brqydn";
-export const PAYMENT_PARTNER_CUT = 0.15;
+// ── Roles ─────────────────────────────────────────────────────────────────────
+export const OWNER_ROLE_ID      = "1531169031648972910"; // Mod 5 (highest non-user role)
+export const CO_OWNER_ROLE_ID   = "1531169031648972910"; // Mod 5
+export const BUILD_TICKET_ROLE_ID    = "1531375209968308274";
+export const GIVEAWAY_ROLE_ID        = "1531375074240626790";
+export const GENERAL_TICKET_ROLE_ID  = "1531299742364078200";
+export const SKELLY_TICKET_ROLE_ID   = "1531374958696071168";
+export const MODLOG_STAFF_ROLE_ID    = "1531299742364078200"; // All Staff
 
-export const MOD_ROLE_IDS = [
-  "1450662192365047822",
-  "1450662192365047823",
-  "1450662192365047824",
-  "1450662192365047825",
+// ── Channels ──────────────────────────────────────────────────────────────────
+export const TICKET_LOG_CHANNEL_ID        = "1531375622822170735";
+export const TRANSCRIPT_CHANNEL_ID        = "1531375761917739019";
+export const STAFF_APP_RESPONSES_CHANNEL_ID = "1531152051872989294";
+export const SPAM_LOG_CHANNEL_ID          = "1531376198024827020";
+export const MOD_LOG_CHANNEL_ID           = "1531376050297376880";
+export const INVITE_LOG_CHANNEL_ID        = "1531376692621348894";
+export const COUNTING_CHANNEL_ID          = "1531341203990384640";
+
+// Set these once you have the channel IDs:
+export const LEVELUP_CHANNEL_ID = "1531103024884219955";
+
+// ── Hardcoded in bot.ts — moved here for easy editing ─────────────────────────
+export const WELCOME_CHANNEL_DEFAULT = "1531128842922496160";
+export const WELCOME_RULES_CH   = "1531110673483043037";
+
+export const BLACKLISTED_ROLE_ID  = "1531374483481301295";
+export const AUTO_JOIN_ROLE_ID    = "1531120075791401152"; // auto-assigned on member join
+export const VOUCH_CHANNEL_IDS_LIST = ["1531306783317033162", "1531306818293207040"] as const;
+export const VOUCH_CHANNEL_ID_PRIMARY = "1531306783317033162";
+export const SKELLY_PRICES_CHANNEL_ID = "1531306497395527910";
+
+// ── Role arrays ───────────────────────────────────────────────────────────────
+export const MOD_ROLE_IDS: string[] = [
+  "1531158144896729188", // Mod 1 — Helper
+  "1531362958020710440", // Mod 2 — Sr.Helper
+  "1531122578679271594", // Mod 3 — Moderator
+  "1531152631505092608", // Mod 4 — Head Moderator
+  "1531169031648972910", // Mod 5 — Co-Owner level
 ];
 
-export const STAFF_ROLE_IDS = [
-  "1520248946637930516",
+export const STAFF_ROLE_IDS: string[] = [
+  "1531299742364078200", // Staff
 ];
 
-export const MODLOG_STAFF_ROLE_ID = "1522413015759061092";
+// ── Colors ────────────────────────────────────────────────────────────────────
+export const BOT_COLOR      = 0x5865f2;
+export const SUCCESS_COLOR  = 0x57f287;
+export const ERROR_COLOR    = 0xed4245;
+export const WARNING_COLOR  = 0xfee75c;
+export const GOLD_COLOR     = 0xf1c40f;
 
-export const BOT_COLOR = 0x5865f2;
-export const SUCCESS_COLOR = 0x57f287;
-export const ERROR_COLOR = 0xed4245;
-export const WARNING_COLOR = 0xfee75c;
-export const GOLD_COLOR = 0xf1c40f;
-
+// ── Ticket categories ─────────────────────────────────────────────────────────
 export interface TicketCategory {
   id: string;
   label: string;
@@ -67,7 +91,7 @@ export const REGULAR_CATEGORIES: TicketCategory[] = [
     id: "skellys",
     label: "Buy/Sell Skellys",
     description:
-      "For purchasing or selling Skelly Spawners. You can view current prices in <#1518633695404101773> before opening a ticket.",
+      `For purchasing or selling Skelly Spawners. You can view current prices in <#${SKELLY_PRICES_CHANNEL_ID}> before opening a ticket.`,
     color: 0x5865f2,
     channelPrefix: "skelly",
     discordCategoryName: "Skelly Tickets",
@@ -76,7 +100,7 @@ export const REGULAR_CATEGORIES: TicketCategory[] = [
     id: "builder-application",
     label: "Builder Application",
     description:
-      "Want to become a builder on V3 Sanctuary? Open this ticket and a staff member will review your application. Please be ready to share your builds or portfolio.",
+      "Want to become a builder on Spiderman? Open this ticket and a staff member will review your application. Please be ready to share your builds or portfolio.",
     color: 0xe67e22,
     channelPrefix: "builder-app",
     discordCategoryName: "Support Tickets",
@@ -85,7 +109,7 @@ export const REGULAR_CATEGORIES: TicketCategory[] = [
     id: "schematic-application",
     label: "Schematic Application",
     description:
-      "Want to become a Schematic Poster on V3 Sanctuary? Open this ticket and a staff member will review your submission. Please be ready to share your schematics.",
+      "Want to become a Schematic Poster on Spiderman? Open this ticket and a staff member will review your submission. Please be ready to share your schematics.",
     color: 0x9b59b6,
     channelPrefix: "schematic-app",
     discordCategoryName: "Support Tickets",
@@ -116,3 +140,6 @@ export const FARM_CATEGORY: TicketCategory = {
 export const BUILDER_CATEGORY: TicketCategory = REGULAR_CATEGORIES.find((c) => c.id === "builder-application")!;
 
 export const ALL_CATEGORIES: TicketCategory[] = [...REGULAR_CATEGORIES, SKELLY_CATEGORY, FARM_CATEGORY];
+
+export const PAYMENT_PARTNER_IGN = "brqydn";
+export const PAYMENT_PARTNER_CUT = 0.15;

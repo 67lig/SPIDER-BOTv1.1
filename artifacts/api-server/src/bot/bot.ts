@@ -41,6 +41,7 @@ import {
 import { logger } from "../lib/logger.js";
 import {
   OWNER_ID,
+  OWNER_IDS,
   CO_OWNER_ROLE_ID,
   REGULAR_CATEGORIES,
   FARM_CATEGORY,
@@ -57,6 +58,12 @@ import {
   MOD_ROLE_IDS,
   STAFF_ROLE_IDS,
   MODLOG_STAFF_ROLE_ID,
+  BLACKLISTED_ROLE_ID,
+  AUTO_JOIN_ROLE_ID,
+  VOUCH_CHANNEL_IDS_LIST,
+  VOUCH_CHANNEL_ID_PRIMARY,
+  WELCOME_CHANNEL_DEFAULT,
+  WELCOME_RULES_CH,
   SKELLY_CATEGORY,
   GENERAL_TICKET_ROLE_ID,
   SKELLY_TICKET_ROLE_ID,
@@ -65,6 +72,8 @@ import {
   LEVELUP_CHANNEL_ID,
   SPAM_LOG_CHANNEL_ID,
   MOD_LOG_CHANNEL_ID,
+  INVITE_LOG_CHANNEL_ID,
+  COUNTING_CHANNEL_ID,
 } from "./config.js";
 import { storage, type GiveawayEntry, type WarnEntry } from "./storage.js";
 
@@ -74,7 +83,8 @@ const DONUTSMP_API_KEY = process.env["DONUTSMP_API_TOKEN"];
 const ONLINE_COLOR = 0x57f287;
 const OFFLINE_COLOR = 0xed4245;
 const CLAIM_HOURS = 12;
-const BLACKLISTED_ROLE_ID = "1518639268925407373";
+// BLACKLISTED_ROLE_ID, AUTO_JOIN_ROLE_ID, VOUCH_CHANNEL_IDS_LIST, VOUCH_CHANNEL_ID_PRIMARY,
+// WELCOME_* — all imported from config.ts
 
 let _client: Client | null = null;
 
@@ -198,27 +208,27 @@ async function applyProgressivePunishment(
     if (member.moderatable) {
       await member.timeout(60_000, `Auto-punishment (offense #2): ${reason}`).catch(() => {});
     }
-    user?.send({ embeds: [muteDmEmbed(reason, "1 minute", "V3 BOT (AutoMod)", guild.name)] }).catch(() => {});
+    user?.send({ embeds: [muteDmEmbed(reason, "1 minute", "Spiderman BOT (AutoMod)", guild.name)] }).catch(() => {});
   } else if (newCount === 3) {
     // 3rd: 5 minute timeout
     if (member.moderatable) {
       await member.timeout(5 * 60_000, `Auto-punishment (offense #3): ${reason}`).catch(() => {});
     }
-    user?.send({ embeds: [muteDmEmbed(reason, "5 minutes", "V3 BOT (AutoMod)", guild.name)] }).catch(() => {});
+    user?.send({ embeds: [muteDmEmbed(reason, "5 minutes", "Spiderman BOT (AutoMod)", guild.name)] }).catch(() => {});
   } else if (newCount === 4) {
     // 4th: 30 minute timeout + warn
     if (member.moderatable) {
       await member.timeout(30 * 60_000, `Auto-punishment (offense #4): ${reason}`).catch(() => {});
     }
-    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #4): ${reason}`, moderatorId: "BOT", moderatorTag: "V3 BOT", timestamp: new Date().toISOString() };
+    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #4): ${reason}`, moderatorId: "BOT", moderatorTag: "Spiderman BOT", timestamp: new Date().toISOString() };
     const warnCount = storage.addWarn(userId, warnEntry);
-    user?.send({ embeds: [muteDmEmbed(`${reason} (Warning ${warnCount}/5)`, "30 minutes", "V3 BOT (AutoMod)", guild.name)] }).catch(() => {});
+    user?.send({ embeds: [muteDmEmbed(`${reason} (Warning ${warnCount}/5)`, "30 minutes", "Spiderman BOT (AutoMod)", guild.name)] }).catch(() => {});
     if (warnCount >= 5 && member.bannable) {
       await member.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
     }
   } else {
     // 5th+: warn (auto-ban at 5)
-    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #${newCount}): ${reason}`, moderatorId: "BOT", moderatorTag: "V3 BOT", timestamp: new Date().toISOString() };
+    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #${newCount}): ${reason}`, moderatorId: "BOT", moderatorTag: "Spiderman BOT", timestamp: new Date().toISOString() };
     const warnCount = storage.addWarn(userId, warnEntry);
     user?.send({ embeds: [warnDmEmbed(reason, warnCount, guild.name)] }).catch(() => {});
     if (warnCount >= 5 && member.bannable) {
@@ -565,6 +575,18 @@ async function expireGiveawayClaims(giveawayId: string) {
 
 // ─── Bot Client ────────────────────────────────────────────────────────────
 
+// ── Invite tracker cache: guildId → Map<inviteCode, uses> ────────────────────
+const _inviteCache = new Map<string, Map<string, number>>();
+
+async function cacheGuildInvites(guild: import("discord.js").Guild): Promise<void> {
+  try {
+    const invites = await guild.invites.fetch();
+    const m = new Map<string, number>();
+    for (const inv of invites.values()) m.set(inv.code, inv.uses ?? 0);
+    _inviteCache.set(guild.id, m);
+  } catch {}
+}
+
 export function createBotClient(): Client | null {
   if (!TOKEN) {
     logger.warn("DISCORD_BOT_TOKEN not set, bot disabled. Set the secret to enable it.");
@@ -585,6 +607,7 @@ export function createBotClient(): Client | null {
       GatewayIntentBits.DirectMessages,
       GatewayIntentBits.AutoModerationExecution,
       GatewayIntentBits.GuildMessageReactions,
+      GatewayIntentBits.GuildInvites,
     ],
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
@@ -599,6 +622,11 @@ export function createBotClient(): Client | null {
         logger.warn({ err: e, guild: guild.name }, "AutoMod failed"),
       );
     }
+    // Cache invites for invite tracker
+    for (const guild of client.guilds.cache.values()) {
+      await cacheGuildInvites(guild).catch(() => {});
+    }
+
     // Restore timers for active giveaways (and immediately end any that expired while offline)
     for (const gw of storage.getActiveGiveaways()) {
       scheduleGiveaway(gw);
@@ -713,43 +741,86 @@ export function createBotClient(): Client | null {
   });
 
   // ─── Vouch Channel Format Enforcer ─────────────────────────────────────────
-  const VOUCH_CHANNEL_IDS = new Set(["1503988954490470461", "1518620232787165225"]);
-  const VOUCH_CHANNEL_ID = "1503988954490470461"; // kept for DM reference
+  const VOUCH_CHANNEL_IDS = new Set(VOUCH_CHANNEL_IDS_LIST);
+  const VOUCH_CHANNEL_ID = VOUCH_CHANNEL_ID_PRIMARY;
   const VOUCH_REGEX = /^(scam\s*vouch|vouch)\s+<@!?\d+>(\s+\S.*)?$/i;
 
   // Per-channel sticky repost cooldown
   const stickyBusy = new Set<string>();
 
   // ─── Welcome Channels ────────────────────────────────────────────────────
-  const WELCOME_CHANNEL_DEFAULT = "1450662193266692282";
-  const WELCOME_RULES_CH   = "1450662193266692286";
-  const WELCOME_GIVEAWAY_1 = "1450662193266692288";
-  const WELCOME_GIVEAWAY_2 = "1450662193266692290";
-  const WELCOME_GIVEAWAY_3 = "1496946833757311082";
+  // WELCOME_CHANNEL_DEFAULT, WELCOME_RULES_CH, WELCOME_GIVEAWAY_1/2/3 — imported from config.ts
 
   client.on("guildMemberAdd", async (member) => {
+    // ── Welcome message ──
     const welcomeChannelId = storage.getWelcomeChannelId() || WELCOME_CHANNEL_DEFAULT;
     const ch = member.guild.channels.cache.get(welcomeChannelId) as TextChannel | null;
-    if (!ch) return;
-    const embed = new EmbedBuilder()
-      .setColor(SUCCESS_COLOR)
-      .setAuthor({ name: member.guild.name, iconURL: member.guild.iconURL() ?? undefined })
-      .setTitle("Welcome To V3 Sanctuary")
-      .setDescription(
-        `Please read the rules <#${WELCOME_RULES_CH}>.\nAfter reading, feel free to look at the channels below.\n\nFor giveaways and official trade opportunities, visit:\n<#${WELCOME_GIVEAWAY_1}>\n<#${WELCOME_GIVEAWAY_2}>\n<#${WELCOME_GIVEAWAY_3}>`,
-      )
-      .setThumbnail(member.user.displayAvatarURL())
-      .setTimestamp();
-    await ch.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {});
+    if (ch) {
+      const embed = new EmbedBuilder()
+        .setColor(SUCCESS_COLOR)
+        .setAuthor({ name: member.guild.name, iconURL: member.guild.iconURL() ?? undefined })
+        .setTitle("Welcome To Spiderman")
+        .setDescription(
+          `Welcome to the server! Please read the rules in <#${WELCOME_RULES_CH}> before participating.`,
+        )
+        .setThumbnail(member.user.displayAvatarURL())
+        .setTimestamp();
+      await ch.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {});
+    }
+
+    // ── Invite tracker ──
+    try {
+      const cached = _inviteCache.get(member.guild.id);
+      const freshInvites = await member.guild.invites.fetch().catch(() => null);
+      if (freshInvites) {
+        let inviterId: string | null = null;
+        if (cached) {
+          for (const inv of freshInvites.values()) {
+            const cachedUses = cached.get(inv.code) ?? 0;
+            if ((inv.uses ?? 0) > cachedUses && inv.inviterId) {
+              inviterId = inv.inviterId;
+              break;
+            }
+          }
+        }
+        // Update cache with latest uses
+        const newMap = new Map<string, number>();
+        for (const inv of freshInvites.values()) newMap.set(inv.code, inv.uses ?? 0);
+        _inviteCache.set(member.guild.id, newMap);
+
+        if (inviterId) {
+          const stats = storage.recordInviteJoin(member.id, inviterId);
+          const valid = stats.joins - stats.leaves;
+          const logCh = member.guild.channels.cache.get(INVITE_LOG_CHANNEL_ID) as TextChannel | null;
+          if (logCh) {
+            await logCh.send(
+              `<@${member.id}> has been invited by <@${inviterId}>. They now have **${valid}** invite${valid === 1 ? "" : "s"}.`
+            ).catch(() => {});
+          }
+        }
+      }
+    } catch {}
   });
 
-  const BOOST_ROLE_ID = "1520970038369194077";
+  client.on("guildMemberRemove", async (member) => {
+    const result = storage.recordInviteLeave(member.id);
+    if (!result) return;
+    const { inviterId, valid } = result;
+    const logCh = member.guild.channels.cache.get(INVITE_LOG_CHANNEL_ID) as TextChannel | null;
+    if (logCh) {
+      await logCh.send(
+        `<@${member.id}> left the server. <@${inviterId}> now has **${valid}** invite${valid === 1 ? "" : "s"}.`
+      ).catch(() => {});
+    }
+  });
+
+  // AUTO_JOIN_ROLE_ID — imported from config.ts
 
   client.on("guildMemberUpdate", async (oldMember, newMember) => {
     const wasBoosting = !!oldMember.premiumSince;
     const isBoosting = !!newMember.premiumSince;
     if (!wasBoosting && isBoosting) {
-      await newMember.roles.add(BOOST_ROLE_ID).catch(() => {});
+      await newMember.roles.add(AUTO_JOIN_ROLE_ID).catch(() => {});
     }
 
     // Detect timeout expiry / removal → send unmute DM
@@ -757,7 +828,7 @@ export function createBotClient(): Client | null {
     const isTimedOut  = !!newMember.communicationDisabledUntil;
     if (wasTimedOut && !isTimedOut) {
       newMember.send({
-        embeds: [unmuteDmEmbed("Expired", "V3 BOT", newMember.guild.name)],
+        embeds: [unmuteDmEmbed("Expired", "Spiderman BOT", newMember.guild.name)],
       }).catch(() => {});
     }
   });
@@ -774,6 +845,44 @@ export function createBotClient(): Client | null {
     if (_processedMsgIds.has(msg.id)) return;
     _processedMsgIds.add(msg.id);
     setTimeout(() => _processedMsgIds.delete(msg.id), 30_000);
+
+    // ── Counting channel ─────────────────────────────────────────────────────
+    if (msg.channelId === COUNTING_CHANNEL_ID) {
+      void (async () => {
+        const trimmed = msg.content.trim();
+        const num = parseInt(trimmed, 10);
+
+        // Non-number: delete silently, no reset
+        if (isNaN(num) || String(num) !== trimmed) {
+          await msg.delete().catch(() => {});
+          return;
+        }
+
+        const state = storage.getCountingState();
+        const isSameUser = msg.author.id === state.lastUserId && state.lastUserId !== "";
+
+        if (num === state.current && !isSameUser) {
+          // ✅ Correct number
+          await msg.react("✅").catch(() => {});
+          storage.setCountingState(state.current + 1, msg.author.id);
+        } else {
+          // ❌ Wrong number or same user twice
+          await msg.react("❌").catch(() => {});
+          const ruinedAt = state.current - 1;
+          storage.setCountingState(1, "");
+          if (ruinedAt > 0) {
+            await msg.channel.send(
+              `<@${msg.author.id}> **RUINED IT AT ${ruinedAt}!!** Next number is \`1\`. Wrong number.`
+            ).catch(() => {});
+          } else {
+            await msg.channel.send(
+              `<@${msg.author.id}> Wrong number! Next number is \`1\`.`
+            ).catch(() => {});
+          }
+        }
+      })();
+      return; // skip all other processing for counting channel messages
+    }
 
     // ── XP tracking + level-up announcements ──
     if (msg.guild) {
@@ -1015,6 +1124,18 @@ export function createBotClient(): Client | null {
   });
 
   // ── Reaction roles ──────────────────────────────────────────────────────────
+  client.on("inviteCreate", (invite) => {
+    const guildId = invite.guild?.id;
+    if (!guildId) return;
+    const m = _inviteCache.get(guildId) ?? new Map<string, number>();
+    m.set(invite.code, invite.uses ?? 0);
+    _inviteCache.set(guildId, m);
+  });
+
+  client.on("inviteDelete", (invite) => {
+    _inviteCache.get(invite.guild?.id ?? "")?.delete(invite.code);
+  });
+
   client.on("messageReactionAdd", async (reaction, user) => {
     if (user.bot) return;
     if (reaction.partial) {
@@ -1452,7 +1573,7 @@ function hasDisallowedLink(content: string): boolean {
   return false;
 }
 
-function isOwner(id: string) { return id === OWNER_ID; }
+function isOwner(id: string) { return OWNER_IDS.includes(id); }
 function isCoOwner(m: GuildMember) { return m.roles.cache.has(CO_OWNER_ROLE_ID) && !isOwner(m.id); }
 function isOwnerOrCoOwner(m: GuildMember) {
   return isOwner(m.id) || m.roles.cache.has(OWNER_ROLE_ID) || isCoOwner(m);
@@ -1867,7 +1988,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       )
       .setTimestamp();
     await i.reply({ embeds: [warnEmbed] });
-    target.send({ embeds: [warnDmEmbed(reason, count, guild?.name ?? "V3 Sanctuary")] }).catch(() => {});
+    target.send({ embeds: [warnDmEmbed(reason, count, guild?.name ?? "Spiderman")] }).catch(() => {});
     if (count >= 5) {
       const m = guild.members.cache.get(target.id);
       if (m?.bannable) await m.ban({ reason: `Auto-ban: 5 warnings reached` }).catch(() => {});
@@ -2292,7 +2413,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
           inline: false,
         },
       )
-      .setFooter({ text: `V3 Sanctuary • Rank Card`, iconURL: guild?.iconURL() ?? undefined })
+      .setFooter({ text: `Spiderman • Rank Card`, iconURL: guild?.iconURL() ?? undefined })
       .setTimestamp();
 
     await i.reply({ embeds: [embed] });
@@ -3257,7 +3378,7 @@ async function handleButton(i: ButtonInteraction) {
       await dm.send({
         content:
           `**Congratulations — Your Application Has Been Accepted!**\n\n` +
-          `We're thrilled to welcome you to the **V3 Sanctuary** staff team!\n\n` +
+          `We're thrilled to welcome you to the **Spiderman** staff team!\n\n` +
           `A member of leadership will be reaching out to you shortly with next steps and everything you need to get started. ` +
           `In the meantime, please make sure you're active in the server and ready to begin.\n\n` +
           `Welcome aboard — we're excited to have you. 🏆`,
@@ -3283,7 +3404,7 @@ async function handleButton(i: ButtonInteraction) {
       const dm = await applicant.createDM();
       await dm.send({
         content:
-          `**Regarding Your Staff Application — V3 Sanctuary**\n\n` +
+          `**Regarding Your Staff Application — Spiderman**\n\n` +
           `After careful review, we've decided not to move forward with your application at this time.\n\n` +
           `Please don't be discouraged — this isn't a permanent decision. ` +
           `You are welcome to reapply in **1 week**, and we encourage you to use that time to stay active, ` +
@@ -3698,7 +3819,7 @@ async function handleButton(i: ButtonInteraction) {
       await i.deferUpdate();
       const WHITE = 0xffffff;
       await ch.send({ embeds: [
-        new EmbedBuilder().setColor(WHITE).setTitle("V4 Sanctuary Rules").addFields({ name: "Section 1 — The Preamble", value: ["────────────────────────────", "By joining (and participating in this server), you agree to follow all established rules, including any updates or changes made in the future.", "", "Please keep your direct messages enabled. If disciplinary action is taken against you, staff will contact you with the reason for the punishment.", "", "The rules listed here are not exhaustive. Staff retain full authority to address behavior that violates the spirit of the community, even if it is not specifically mentioned."].join("\n") }),
+        new EmbedBuilder().setColor(WHITE).setTitle("Spiderman Rules").addFields({ name: "Section 1 — The Preamble", value: ["────────────────────────────", "By joining (and participating in this server), you agree to follow all established rules, including any updates or changes made in the future.", "", "Please keep your direct messages enabled. If disciplinary action is taken against you, staff will contact you with the reason for the punishment.", "", "The rules listed here are not exhaustive. Staff retain full authority to address behavior that violates the spirit of the community, even if it is not specifically mentioned."].join("\n") }),
       ] });
       await ch.send({ embeds: [
         new EmbedBuilder().setColor(WHITE).addFields({ name: "Section 2 — Terms and Services", value: ["────────────────────────────", "You must listen to [Discord's Terms of Service](https://discord.com/terms) at all times.", "", "By being part of this server, you agree to follow Discord's Community Guidelines to help maintain a safe and respectful environment.", "", "**To join the official V4 server, you must be at least 13 years old.**", "", "Do not discuss, promote, or admit to violating Discord's Terms of Service (e.g., scamming, distributing malicious content, evading bans).", "", "Any content that violates Discord's Terms of Service or Community Guidelines will be removed and may result in disciplinary action, including a ban. This includes, but is not limited to: harassment, scams, malicious links, or sharing inappropriate content."].join("\n") }),
@@ -4007,7 +4128,7 @@ async function handleButton(i: ButtonInteraction) {
         embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`<@${alert.userId}> warned for spam. **(${count}/5 warnings)**`)],
         components: [],
       });
-      target.user.send({ embeds: [warnDmEmbed("Spamming", count, guild?.name ?? "V3 Sanctuary")] }).catch(() => {});
+      target.user.send({ embeds: [warnDmEmbed("Spamming", count, guild?.name ?? "Spiderman")] }).catch(() => {});
       if (count >= 5 && target.bannable) await target.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
     } else if (action === "kick") {
       if (!target.kickable) { await i.reply({ embeds: [errEmbed("I cannot kick this member.")], flags: 64 }); return; }
@@ -4372,6 +4493,7 @@ async function handleModal(i: ModalSubmitInteraction) {
         { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
         { id: guild.members.me!.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] },
         { id: BUILD_TICKET_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
+        { id: STAFF_ROLE_IDS[0]!, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
       ],
     });
     const welcomeEmbed = new EmbedBuilder()
@@ -4455,6 +4577,10 @@ async function handleModal(i: ModalSubmitInteraction) {
         },
         {
           id: BUILD_TICKET_ROLE_ID,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
+        },
+        {
+          id: STAFF_ROLE_IDS[0]!,
           allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
         },
       ],
@@ -5191,7 +5317,7 @@ async function runStaffApplication(user: User, guild: Guild) {
     await dm.send({
       content:
         `✅ **Application Submitted!**\n\n` +
-        `Thank you for applying to be a staff member at **V3 Sanctuary**!\n` +
+        `Thank you for applying to be a staff member at **Spiderman**!\n` +
         `Your application has been received and will be reviewed by leadership.\n\n` +
         `**Please do not ask about your application status.** You will be contacted if you move forward.`,
     });
