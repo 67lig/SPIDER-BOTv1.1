@@ -1,59 +1,49 @@
-# Donut Stats
+# DonutSMP Stats
 
-A stats dashboard and Discord bot for the DonutSMP Minecraft server. Players can search any username to view money, shards, playtime, kills, blocks, and more — all pulled from the official DonutSMP API.
-
-## Run & Operate
-
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000) + Discord bot
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required secrets: `DISCORD_BOT_TOKEN`, `DONUTSMP_API_TOKEN`, `DATABASE_URL`
+Unofficial stats site for the DonutSMP Minecraft server. Shows player stats (money, shards, playtime, kills, etc.) fetched from the DonutSMP API. Includes an optional Discord moderation/ticket bot.
 
 ## Stack
 
-- pnpm workspaces, Node.js 20, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (bundled to `dist/index.mjs`)
-- Discord bot: discord.js v14
+- **Runtime:** Node.js 20 (pnpm workspace monorepo)
+- **Server:** Express 5 + TypeScript, compiled with esbuild
+- **Bot:** discord.js 14
+- **DB:** PostgreSQL via `pg` (optional — used for bot data backup)
 
-## Where things live
+## How to run
 
-- `artifacts/api-server/src/app.ts` — Express app + all SSR HTML pages (home, players, player profile)
-- `artifacts/api-server/src/routes/donut.ts` — proxy routes to DonutSMP API
-- `artifacts/api-server/src/bot/bot.ts` — Discord bot (tickets, giveaways, XP, moderation)
-- `artifacts/api-server/src/index.ts` — server entry point (starts Express + bot)
-- `lib/db/src/schema/` — Drizzle ORM schema
-- `lib/api-spec/` — OpenAPI spec (source of truth for API contracts)
+The **Discord Bot** workflow builds and starts the server:
 
-## Architecture decisions
+```
+cd artifacts/api-server && pnpm run dev
+```
 
-- The web dashboard is server-side rendered (SSR) using plain HTML/CSS strings from Express — no React on the frontend.
-- The Discord bot and web server run in the same process, started together in `index.ts`.
-- The DonutSMP API key (`DONUTSMP_API_TOKEN`) is only used server-side — never exposed to the browser.
-- Bot state (giveaways, tickets, etc.) is persisted via PostgreSQL through Drizzle ORM.
+Serves on port 5000.
 
-## Product
+## Environment variables
 
-- **Home page** (`/`): Hero with live online player count from DonutSMP API.
-- **Players page** (`/players`): Search bar + popular players grid.
-- **Player profile** (`/player/:username`): Full stats card — money, shards, playtime, kills, deaths, K/D, mobs, blocks, shop earnings.
-- **Discord bot**: Ticket system, giveaways, XP/leveling, moderation commands.
+| Variable | Required | Description |
+|---|---|---|
+| `PORT` | Yes | Port to listen on (Replit sets this to `5000`) |
+| `DONUTSMP_API_TOKEN` | No | Bearer token for the DonutSMP API — without it, player stat lookups return errors |
+| `DISCORD_TOKEN` | No | Discord bot token |
+| `BOT_ENABLED` | No | Set to `1` to enable the Discord bot (production only by default) |
+| `DATABASE_URL` | No | PostgreSQL connection string for bot data backup |
+
+## Project structure
+
+```
+artifacts/api-server/   Express server + Discord bot
+  src/app.ts            HTML page routes (home, players, player profile)
+  src/index.ts          Server entry — starts Express + bot
+  src/routes/donut.ts   Proxy routes to the DonutSMP API
+  src/bot/bot.ts        Discord bot (slash commands, moderation, tickets)
+  src/bot/storage.ts    Bot data storage (JSON file + optional PostgreSQL backup)
+lib/api-zod/            Zod schemas generated from the OpenAPI spec
+lib/api-client-react/   React query hooks for the API (unused by the server)
+lib/db/                 Drizzle ORM schema (placeholder — not yet used)
+```
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-- `DONUTSMP_API_TOKEN` is the correct secret name (the code previously used `DONUTSMP_API_KEY` — this was fixed during migration).
-- Always run `pnpm install` from the workspace root before running dev, not from individual package dirs.
-- The `dev` script runs `build` then `start` — no hot reload; rebuild manually after code changes.
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Keep the existing project structure and stack.
+- `DONUTSMP_API_TOKEN` is intentionally left blank for now.
