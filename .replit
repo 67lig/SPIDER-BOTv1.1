@@ -49,9 +49,9 @@ channel = "stable-25_05"
 
 [userenv.shared]
 PORT = "5000"
+BOT_ENABLED = "1"
 
 [userenv.production]
-BOT_ENABLED = "1"
 
 [[ports]]
 localPort = 5000
