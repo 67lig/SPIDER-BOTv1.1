@@ -208,7 +208,7 @@ function defaultData(): BotData {
     skellyDescription:
       "Buy/Sell Skellys – For purchase questions, payment issues, donation inquiries, reward claims, or buying/selling Skelly Spawners.",
     categoryMessages: {},
-    ticketPanelTitle: "1450662192365047822,1450662192365047823,1450662192365047824,1450662192365047824,1450662192365047825thSupport Tickets",
+    ticketPanelTitle: "Support Tickets",
     ticketPanelDesc:
       "Need help or have a question? Click one of the buttons below to open a ticket. Our staff will assist you as soon as possible.",
     giveaways: {},
