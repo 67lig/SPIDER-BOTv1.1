@@ -19,7 +19,7 @@ Skip to content
 
 
 211
-ticketPanelTitle: "1450662192365047822,1450662192365047823,1450662192365047824,1450662192365047824,1450662192365047825thSupport Tickets",
+ticketPanelTitle: "Support Tickets",
 Fix 1. Leveling sometimes dosent say user has leveled up so fix that, also make it so you cant spam to get levels, and create a very good automod for bad words, its already there but better. 1531376198024827020 Also in any ticket you are allowed to put links, discord links, any type of link and file. and the user can do /requestinvite user and a staf member can ccept this and that user is accepted into the ticket. Only works on ticket channels and if its not a ticket channel its a user only message that says; ticket only. Also if a moderator deletes anything from automod logs please say; MODERATOR @ping them has deleted and put the message back up including owners and it keeps going so they cant never delete lastlya dd a /purge command mod 1; helper can only do 10, and other mods can do more than 10. Automod should have spam detection, all cross channel spam is deleted even orginal first channel, bad words ( aka n word ), mention spam, ect.
 
 11 minutes ago
