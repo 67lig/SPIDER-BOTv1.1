@@ -580,6 +580,15 @@ export const storage = {
     saveData(_data);
   },
 
+  // Add XP without touching lastMessage — used for voice XP so text cooldown is unaffected
+  addXPOnly(userId: string, amount: number): void {
+    if (!_data.xp) _data.xp = {};
+    const entry = _data.xp[userId] ?? { xp: 0, lastMessage: 0 };
+    entry.xp += amount;
+    _data.xp[userId] = entry;
+    saveData(_data);
+  },
+
   setXpCooldown(userId: string): void {
     if (!_data.xp) _data.xp = {};
     const entry = _data.xp[userId] ?? { xp: 0, lastMessage: 0 };

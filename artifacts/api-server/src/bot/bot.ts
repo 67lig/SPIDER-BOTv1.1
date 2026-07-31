@@ -866,6 +866,95 @@ export function createBotClient(): Client | null {
     }
   });
 
+  // ─── Voice XP ────────────────────────────────────────────────────────────────
+  // Awards XP every minute to users who are unmuted, undeafened, and not alone.
+  const VOICE_XP_MIN = 2;
+  const VOICE_XP_MAX = 5;
+  const VOICE_XP_INTERVAL_MS = 60_000;
+
+  // userId → { guildId, channelId } for everyone currently active in voice
+  const activeVoiceUsers = new Map<string, { guildId: string; channelId: string }>();
+
+  function isVoiceActive(state: import("discord.js").VoiceState): boolean {
+    return (
+      !!state.channelId &&
+      !state.selfMute &&
+      !state.serverMute &&
+      !state.selfDeaf &&
+      !state.serverDeaf &&
+      state.channelId !== state.guild.afkChannelId
+    );
+  }
+
+  // Seed map from current voice states on ready (handles bot restarts)
+  for (const guild of client.guilds.cache.values()) {
+    for (const state of guild.voiceStates.cache.values()) {
+      if (state.member && !state.member.user.bot && isVoiceActive(state)) {
+        activeVoiceUsers.set(state.member.id, { guildId: guild.id, channelId: state.channelId! });
+      }
+    }
+  }
+
+  client.on("voiceStateUpdate", (oldState, newState) => {
+    const member = newState.member ?? oldState.member;
+    if (!member || member.user.bot) return;
+
+    if (isVoiceActive(newState)) {
+      activeVoiceUsers.set(member.id, { guildId: newState.guild.id, channelId: newState.channelId! });
+    } else {
+      activeVoiceUsers.delete(member.id);
+    }
+  });
+
+  setInterval(() => {
+    void (async () => {
+      for (const [userId, { guildId, channelId }] of activeVoiceUsers) {
+        try {
+          const guild = client.guilds.cache.get(guildId);
+          if (!guild) { activeVoiceUsers.delete(userId); continue; }
+
+          const channel = guild.channels.cache.get(channelId);
+          if (!channel || (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice)) {
+            activeVoiceUsers.delete(userId);
+            continue;
+          }
+
+          // Re-verify they're still active (not muted/deafened since last tick)
+          const voiceState = guild.voiceStates.cache.get(userId);
+          if (!voiceState || !isVoiceActive(voiceState)) {
+            activeVoiceUsers.delete(userId);
+            continue;
+          }
+
+          // Must not be alone — at least 2 non-bot members in the channel
+          const humanMembers = channel.members.filter((m) => !m.user.bot);
+          if (humanMembers.size < 2) continue;
+
+          const gained = Math.floor(Math.random() * (VOICE_XP_MAX - VOICE_XP_MIN + 1)) + VOICE_XP_MIN;
+          const entry = storage.getXP(userId);
+          const oldLevel = computeLevel(entry.xp).level;
+          storage.addXPOnly(userId, gained);
+          const newEntry = storage.getXP(userId);
+          const newLevel = computeLevel(newEntry.xp).level;
+
+          if (newLevel > oldLevel && newLevel >= 1 && newLevel <= 100) {
+            let lvlCh = guild.channels.cache.get(LEVELUP_CHANNEL_ID) as TextChannel | null;
+            if (!lvlCh) {
+              lvlCh = await guild.channels.fetch(LEVELUP_CHANNEL_ID).catch(() => null) as TextChannel | null;
+            }
+            if (lvlCh) {
+              await lvlCh.send({
+                content: `<@${userId}> just leveled up to **Level ${newLevel}**! 🎙️`,
+              }).catch((e) => logger.warn({ err: e }, "Voice level-up message failed to send"));
+            }
+          }
+        } catch (err) {
+          logger.warn({ err, userId }, "Voice XP tick error");
+        }
+      }
+    })();
+  }, VOICE_XP_INTERVAL_MS);
+
   const XP_COOLDOWN_MS = 60_000;  // 1 message per minute earns XP — prevents spam leveling
   const XP_MIN = 5;
   const XP_MAX = 15;
@@ -1796,11 +1885,13 @@ async function closeTicket(
   }
 
   // ── Staff task tracking ───────────────────────────────────────────────────
-  // Only credit the closer when a staff member (not the ticket owner) closes.
-  if (closedById !== ticket.userId) {
+  // Credit whoever handled (claimed) the ticket; fall back to the closer.
+  // Skip if the ticket owner closed their own ticket with no staff involvement.
+  const handlerId = ticket.claimedById ?? (closedById !== ticket.userId ? closedById : null);
+  if (handlerId) {
     const isBuildTicket = ticket.categoryId === "buy-farms" || ticket.categoryId === "build";
     if (isBuildTicket) {
-      storage.incrementBuildsCompleted(closedById);
+      storage.incrementBuildsCompleted(handlerId);
     } else if (ticket.categoryId === "giveaway-claim") {
       // For giveaway-claim tickets closed with "paid" → credit the giveaway host
       if (/paid/i.test(reason) && ticket.giveawayId) {
@@ -1812,9 +1903,9 @@ async function closeTicket(
           }
         }
       }
-      storage.incrementStaffHandled(closedById);
+      storage.incrementStaffHandled(handlerId);
     } else {
-      storage.incrementStaffHandled(closedById);
+      storage.incrementStaffHandled(handlerId);
     }
   }
 }
@@ -2531,7 +2622,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     // ── Build embed ──────────────────────────────────────────────────────────
     const embed = new EmbedBuilder()
       .setColor(BOT_COLOR)
-      .setTitle("📋 Taskbook Tasks")
+      .setTitle("Taskbook Tasks")
       .setDescription(
         viewSelf
           ? "Staff performance ledger · auto-tracked on ticket actions"
@@ -2542,20 +2633,20 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       .setTimestamp();
 
     // Tickets Renamed — all staff
-    embed.addFields({ name: "🏷️ Tickets Renamed", value: `${tasks.ticketsRenamed}`, inline: true });
+    embed.addFields({ name: "Tickets Renamed", value: `${tasks.ticketsRenamed}`, inline: true });
 
     // Tickets Handled / Builds Complete — label depends on role
     if (!viewerIsMod && isBuilder) {
       // Builder viewing own stats: show builds
-      embed.addFields({ name: "🔨 Builds Complete", value: `${tasks.buildsCompleted}`, inline: true });
+      embed.addFields({ name: "Builds Complete", value: `${tasks.buildsCompleted}`, inline: true });
     } else if (!viewerIsMod && !isBuilder) {
       // Non-builder staff viewing own stats: show handled
-      embed.addFields({ name: "📋 Tickets Handled", value: `${tasks.ticketsHandled}`, inline: true });
+      embed.addFields({ name: "Tickets Handled", value: `${tasks.ticketsHandled}`, inline: true });
     } else {
       // Mod+ viewing someone else (or own): show both
       embed.addFields(
-        { name: "📋 Tickets Handled", value: `${tasks.ticketsHandled}`, inline: true },
-        { name: "🔨 Builds Complete", value: `${tasks.buildsCompleted}`, inline: true },
+        { name: "Tickets Handled", value: `${tasks.ticketsHandled}`, inline: true },
+        { name: "Builds Complete", value: `${tasks.buildsCompleted}`, inline: true },
       );
     }
 
@@ -2568,11 +2659,11 @@ async function handleCommand(i: ChatInputCommandInteraction) {
         : tasks.sponsoredAmount >= 1_000
         ? `${(tasks.sponsoredAmount / 1_000).toFixed(1)}k`
         : `${tasks.sponsoredAmount}`;
-      embed.addFields({ name: "💎 Sponsored Amount", value: sponsoredDisplay, inline: true });
+      embed.addFields({ name: "Sponsored Amount", value: sponsoredDisplay, inline: true });
     }
 
     // Messages — always shown
-    embed.addFields({ name: "💬 Messages Sent", value: `${tasks.messagesSent}`, inline: true });
+    embed.addFields({ name: "Messages Sent", value: `${tasks.messagesSent}`, inline: true });
 
     await i.reply({ embeds: [embed], flags: 64 });
     return;
@@ -5445,7 +5536,7 @@ function getSkellyPriceText(): string {
   for (const [name, s] of Object.entries(spawners)) {
     const price = s.sellPrice ?? "—";
     const stock = s.stock ?? 0;
-    lines.push(`- ${name} Spawners: ${price} each | Amount: ${stock}`);
+    lines.push(`- ${name} Spawners: ${price} each | Stock: ${stock}`);
   }
   lines.push("", "**Buying:**");
   for (const [name, s] of Object.entries(spawners)) {
