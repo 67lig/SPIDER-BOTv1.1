@@ -2744,6 +2744,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     await (channel as TextChannel).setName(newName);
     storage.incrementStaffRename(user.id);
     await i.reply({ embeds: [okEmbed(`Channel renamed to **${newName}**`)] });
+    await (channel as TextChannel).send({ content: `<@${user.id}> has renamed the ticket to **${newName}**` });
     return;
   }
 
