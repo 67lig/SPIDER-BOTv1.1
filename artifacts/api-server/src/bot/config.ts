@@ -100,7 +100,7 @@ export const REGULAR_CATEGORIES: TicketCategory[] = [
     id: "builder-application",
     label: "Builder Application",
     description:
-      "Want to become a builder on Spiderman? Open this ticket and a staff member will review your application. Please be ready to share your builds or portfolio.",
+      "Want to become a builder on Bluqo's Bot? Open this ticket and a staff member will review your application. Please be ready to share your builds or portfolio.",
     color: 0xe67e22,
     channelPrefix: "builder-app",
     discordCategoryName: "Support Tickets",
@@ -109,7 +109,7 @@ export const REGULAR_CATEGORIES: TicketCategory[] = [
     id: "schematic-application",
     label: "Schematic Application",
     description:
-      "Want to become a Schematic Poster on Spiderman? Open this ticket and a staff member will review your submission. Please be ready to share your schematics.",
+      "Want to become a Schematic Poster on Bluqo's Bot? Open this ticket and a staff member will review your submission. Please be ready to share your schematics.",
     color: 0x9b59b6,
     channelPrefix: "schematic-app",
     discordCategoryName: "Support Tickets",

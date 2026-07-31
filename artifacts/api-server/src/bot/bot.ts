@@ -211,27 +211,27 @@ async function applyProgressivePunishment(
     if (member.moderatable) {
       await member.timeout(60_000, `Auto-punishment (offense #2): ${reason}`).catch(() => {});
     }
-    user?.send({ embeds: [muteDmEmbed(reason, "1 minute", "Spiderman BOT (AutoMod)", guild.name)] }).catch(() => {});
+    user?.send({ embeds: [muteDmEmbed(reason, "1 minute", "Bluqo's Bot (AutoMod)", guild.name)] }).catch(() => {});
   } else if (newCount === 3) {
     // 3rd: 5 minute timeout
     if (member.moderatable) {
       await member.timeout(5 * 60_000, `Auto-punishment (offense #3): ${reason}`).catch(() => {});
     }
-    user?.send({ embeds: [muteDmEmbed(reason, "5 minutes", "Spiderman BOT (AutoMod)", guild.name)] }).catch(() => {});
+    user?.send({ embeds: [muteDmEmbed(reason, "5 minutes", "Bluqo's Bot (AutoMod)", guild.name)] }).catch(() => {});
   } else if (newCount === 4) {
     // 4th: 30 minute timeout + warn
     if (member.moderatable) {
       await member.timeout(30 * 60_000, `Auto-punishment (offense #4): ${reason}`).catch(() => {});
     }
-    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #4): ${reason}`, moderatorId: "BOT", moderatorTag: "Spiderman BOT", timestamp: new Date().toISOString() };
+    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #4): ${reason}`, moderatorId: "BOT", moderatorTag: "Bluqo's Bot", timestamp: new Date().toISOString() };
     const warnCount = storage.addWarn(userId, warnEntry);
-    user?.send({ embeds: [muteDmEmbed(`${reason} (Warning ${warnCount}/5)`, "30 minutes", "Spiderman BOT (AutoMod)", guild.name)] }).catch(() => {});
+    user?.send({ embeds: [muteDmEmbed(`${reason} (Warning ${warnCount}/5)`, "30 minutes", "Bluqo's Bot (AutoMod)", guild.name)] }).catch(() => {});
     if (warnCount >= 5 && member.bannable) {
       await member.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
     }
   } else {
     // 5th+: warn (auto-ban at 5)
-    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #${newCount}): ${reason}`, moderatorId: "BOT", moderatorTag: "Spiderman BOT", timestamp: new Date().toISOString() };
+    const warnEntry: WarnEntry = { userId, reason: `Auto-warn (offense #${newCount}): ${reason}`, moderatorId: "BOT", moderatorTag: "Bluqo's Bot", timestamp: new Date().toISOString() };
     const warnCount = storage.addWarn(userId, warnEntry);
     user?.send({ embeds: [warnDmEmbed(reason, warnCount, guild.name)] }).catch(() => {});
     if (warnCount >= 5 && member.bannable) {
@@ -792,7 +792,7 @@ export function createBotClient(): Client | null {
       const embed = new EmbedBuilder()
         .setColor(SUCCESS_COLOR)
         .setAuthor({ name: member.guild.name, iconURL: member.guild.iconURL() ?? undefined })
-        .setTitle("Welcome To Spiderman")
+        .setTitle("Welcome to Bluqo's Bot")
         .setDescription(
           `Welcome to the server! Please read the rules in <#${WELCOME_RULES_CH}> before participating.`,
         )
@@ -861,7 +861,7 @@ export function createBotClient(): Client | null {
     const isTimedOut  = !!newMember.communicationDisabledUntil;
     if (wasTimedOut && !isTimedOut) {
       newMember.send({
-        embeds: [unmuteDmEmbed("Expired", "Spiderman BOT", newMember.guild.name)],
+        embeds: [unmuteDmEmbed("Expired", "Bluqo's Bot", newMember.guild.name)],
       }).catch(() => {});
     }
   });
@@ -1428,51 +1428,8 @@ async function registerCommands(client: Client) {
       .setDescription("Remove a user from the application blacklist (owner/co-owner only)")
       .addUserOption((o) => o.setName("user").setDescription("User to unblacklist").setRequired(true)),
     new SlashCommandBuilder()
-      .setName("spawner")
-      .setDescription("Manage spawner stock and prices (staff only)")
-      .addSubcommand((sub) =>
-        sub
-          .setName("add")
-          .setDescription("Add to a spawner's stock count")
-          .addStringOption((o) => o.setName("type").setDescription("Spawner type e.g. Skeleton, Iron Golem").setRequired(true))
-          .addIntegerOption((o) => o.setName("amount").setDescription("Number to add").setRequired(true).setMinValue(1)),
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName("remove")
-          .setDescription("Remove from a spawner's stock count")
-          .addStringOption((o) => o.setName("type").setDescription("Spawner type e.g. Skeleton, Iron Golem").setRequired(true))
-          .addIntegerOption((o) => o.setName("amount").setDescription("Number to remove").setRequired(true).setMinValue(1)),
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName("setprice")
-          .setDescription("Set a spawner's buy or sell price")
-          .addStringOption((o) => o.setName("type").setDescription("Spawner type e.g. Skeleton").setRequired(true))
-          .addStringOption((o) =>
-            o.setName("side").setDescription("buy or sell").setRequired(true)
-              .addChoices({ name: "buy", value: "buy" }, { name: "sell", value: "sell" }),
-          )
-          .addStringOption((o) => o.setName("price").setDescription('Price e.g. 3.3m, 500k — or "none" to remove').setRequired(true)),
-      )
-      .addSubcommand((sub) =>
-        sub.setName("list").setDescription("Show all spawner types with current prices and stock"),
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName("new")
-          .setDescription("Add a new spawner type")
-          .addStringOption((o) => o.setName("name").setDescription("Spawner name e.g. Blaze").setRequired(true)),
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName("delete")
-          .setDescription("Remove a spawner type from the panel (owner only)")
-          .addStringOption((o) => o.setName("name").setDescription("Spawner name e.g. Blaze").setRequired(true)),
-      )
-      .addSubcommand((sub) =>
-        sub.setName("refreshpanel").setDescription("Force-refresh the live spawner price panel embed"),
-      ),
+      .setName("spawnerpanel")
+      .setDescription("Open the spawner admin panel (staff only)"),
     new SlashCommandBuilder()
       .setName("resetlevels")
       .setDescription("Reset ALL player XP and levels to zero (owner only)"),
@@ -2135,7 +2092,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       )
       .setTimestamp();
     await i.reply({ embeds: [warnEmbed] });
-    target.send({ embeds: [warnDmEmbed(reason, count, guild?.name ?? "Spiderman")] }).catch(() => {});
+    target.send({ embeds: [warnDmEmbed(reason, count, guild?.name ?? "Bluqo's Bot")] }).catch(() => {});
     if (count >= 5) {
       const m = guild.members.cache.get(target.id);
       if (m?.bannable) await m.ban({ reason: `Auto-ban: 5 warnings reached` }).catch(() => {});
@@ -2607,7 +2564,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
           inline: false,
         },
       )
-      .setFooter({ text: `Spiderman • Rank Card`, iconURL: guild?.iconURL() ?? undefined })
+      .setFooter({ text: "Bluqo's Bot Rank Card", iconURL: guild?.iconURL() ?? undefined })
       .setTimestamp();
 
     await i.reply({ embeds: [embed] });
@@ -2842,124 +2799,30 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     return;
   }
 
-  if (commandName === "spawner") {
+  if (commandName === "spawnerpanel") {
     if (!guild) return;
     const member = i.member as GuildMember;
-    if (!isStaff(member) && !isOwnerOrCoOwner(member)) {
-      await i.reply({ embeds: [errEmbed("Only staff can manage spawner data.")], flags: 64 });
+    if (!isStaff(member)) {
+      await i.reply({ embeds: [errEmbed("Only staff can access the spawner panel.")], flags: 64 });
       return;
     }
-    const sub = i.options.getSubcommand();
-
-    if (sub === "list") {
-      const spawners = storage.getSpawners();
-      const entries = Object.entries(spawners);
-      if (entries.length === 0) {
-        await i.reply({ embeds: [infoEmbed("No spawner types configured.")], flags: 64 });
-        return;
-      }
-      const fields = entries.map(([name, s]) => ({
-        name: `${name} Spawners`,
-        value: `Buy: **${s.buyPrice ?? "—"}** | Sell: **${s.sellPrice ?? "—"}** | Stock: **${s.stock}**`,
-        inline: false,
-      }));
-      await i.reply({
-        embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Prices & Stock").addFields(...fields).setTimestamp()],
-        flags: 64,
-      });
-      return;
-    }
-
-    if (sub === "add" || sub === "remove") {
-      const typeName = i.options.getString("type", true).trim();
-      const amount = i.options.getInteger("amount", true);
-      const delta = sub === "add" ? amount : -amount;
-      const result = storage.updateSpawnerStock(typeName, delta);
-      if (!result) {
-        await i.reply({ embeds: [errEmbed(`No spawner type matching **${typeName}** found. Use \`/spawner list\` to see available types, or \`/spawner new\` to add one.`)], flags: 64 });
-        return;
-      }
-      const verb = sub === "add" ? "Added" : "Removed";
-      if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
-      const panelResult1 = await refreshSpawnerPanel(i.client);
-      const panelNote1 = panelResult1.ok ? "\n✅ Panel updated." : `\n⚠️ Panel not updated: ${panelResult1.reason}`;
-      await i.editReply({
-        embeds: [okEmbed(`${verb} **${amount}** to **${result.key} Spawners** stock.\nNew stock: **${result.data.stock}**${panelNote1}`)],
-      });
-      return;
-    }
-
-    if (sub === "setprice") {
-      if (!isOwnerOrCoOwner(member)) {
-        await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can change prices.")], flags: 64 });
-        return;
-      }
-      const typeName = i.options.getString("type", true).trim();
-      const side = i.options.getString("side", true) as "buy" | "sell";
-      const priceRaw = i.options.getString("price", true).trim();
-      const price = priceRaw.toLowerCase() === "none" ? null : priceRaw;
-      const result = storage.setSpawnerPrice(typeName, side, price);
-      if (!result) {
-        await i.reply({ embeds: [errEmbed(`No spawner type matching **${typeName}** found. Use \`/spawner new\` to add it first.`)], flags: 64 });
-        return;
-      }
-      const displayPrice = price === null ? "removed" : `set to **${price}**`;
-      if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
-      const panelResult2 = await refreshSpawnerPanel(i.client);
-      const panelNote2 = panelResult2.ok ? "\n✅ Panel updated." : `\n⚠️ Panel not updated: ${panelResult2.reason}`;
-      await i.editReply({
-        embeds: [okEmbed(`**${result.key} Spawners** ${side} price ${displayPrice}.${panelNote2}`)],
-      });
-      return;
-    }
-
-    if (sub === "new") {
-      if (!isOwnerOrCoOwner(member)) {
-        await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can add spawner types.")], flags: 64 });
-        return;
-      }
-      const name = i.options.getString("name", true).trim();
-      const added = storage.addSpawnerType(name);
-      if (!added) {
-        await i.reply({ embeds: [errEmbed(`A spawner type matching **${name}** already exists.`)], flags: 64 });
-        return;
-      }
-      await i.reply({ embeds: [okEmbed(`Added **${name} Spawners** to the list. Use \`/spawner setprice\` to configure prices.`)], flags: 64 });
-      return;
-    }
-
-    if (sub === "delete") {
-      if (!isOwnerOrCoOwner(member)) {
-        await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can delete spawner types.")], flags: 64 });
-        return;
-      }
-      const name = i.options.getString("name", true).trim();
-      const deleted = storage.deleteSpawnerType(name);
-      if (!deleted) {
-        await i.reply({ embeds: [errEmbed(`No spawner type matching **${name}** found. Use \`/spawner list\` to see available types.`)], flags: 64 });
-        return;
-      }
-      if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
-      const panelResultDel = await refreshSpawnerPanel(i.client);
-      const panelNoteDel = panelResultDel.ok ? "\n✅ Panel updated." : `\n⚠️ Panel not updated: ${panelResultDel.reason}`;
-      await i.editReply({ embeds: [okEmbed(`Removed **${deleted} Spawners** from the list.${panelNoteDel}`)] });
-      return;
-    }
-
-    if (sub === "refreshpanel") {
-      if (!isOwnerOrCoOwner(member)) {
-        await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can refresh the panel.")], flags: 64 });
-        return;
-      }
-      if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
-      const r = await refreshSpawnerPanel(i.client);
-      if (r.ok) {
-        await i.editReply({ embeds: [okEmbed("✅ Spawner panel updated.")] });
-      } else {
-        await i.editReply({ embeds: [errEmbed(`Could not update panel: ${r.reason}\n\nUse the owner panel → Skelly Panel → Send Skelly Panel to register a new one.`)] });
-      }
-      return;
-    }
+    const spEmbed = new EmbedBuilder()
+      .setColor(SKELLY_CATEGORY.color)
+      .setTitle("Spawner Admin Panel")
+      .setDescription("Manage spawner stock and prices.")
+      .setTimestamp();
+    const spRow1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId("sp_list").setLabel("List").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("sp_add_stock").setLabel("Add Stock").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("sp_rem_stock").setLabel("Remove Stock").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("sp_set_price").setLabel("Set Price").setStyle(ButtonStyle.Primary),
+    );
+    const spRow2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId("sp_add_type").setLabel("Add Type").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("sp_del_type").setLabel("Delete Type").setStyle(ButtonStyle.Danger),
+    );
+    await i.reply({ embeds: [spEmbed], components: [spRow1, spRow2], flags: 64 });
+    return;
   }
 
   if (commandName === "embed") {
@@ -3534,32 +3397,12 @@ async function handleButton(i: ButtonInteraction) {
       embeds: [
         new EmbedBuilder()
           .setColor(BOT_COLOR)
-          .setTitle("📬 Application Started!")
+          .setTitle("Application Started")
           .setDescription("Please **check your DMs** — the application will be conducted there.\n\nMake sure you have DMs enabled from server members."),
       ],
       flags: 64,
     });
     void runStaffApplication(user, guild!);
-    return;
-  }
-
-  if (customId === "sa_builder_apply") {
-    const bl2 = storage.getAppBlacklist(user.id);
-    if (bl2) {
-      await i.reply({ embeds: [errEmbed(`You are blacklisted from submitting applications.\n**Reason:** ${bl2.reason}`)], flags: 64 });
-      return;
-    }
-    await handleTicketCreate(i, "builder-application", false);
-    return;
-  }
-
-  if (customId === "sa_schematic_apply") {
-    const bl3 = storage.getAppBlacklist(user.id);
-    if (bl3) {
-      await i.reply({ embeds: [errEmbed(`You are blacklisted from submitting applications.\n**Reason:** ${bl3.reason}`)], flags: 64 });
-      return;
-    }
-    await handleTicketCreate(i, "schematic-application", false);
     return;
   }
 
@@ -3572,7 +3415,7 @@ async function handleButton(i: ButtonInteraction) {
       await dm.send({
         content:
           `**Congratulations, your application has been accepted!**\n\n` +
-          `We're thrilled to welcome you to the **Spiderman** staff team!\n\n` +
+          `We're thrilled to welcome you to the **Bluqo's Bot** staff team!\n\n` +
           `A member of leadership will be reaching out to you shortly with next steps and everything you need to get started. ` +
           `In the meantime, please make sure you're active in the server and ready to begin.\n\n` +
           `Welcome aboard, we're excited to have you.`,
@@ -3598,7 +3441,7 @@ async function handleButton(i: ButtonInteraction) {
       const dm = await applicant.createDM();
       await dm.send({
         content:
-          `**Regarding Your Staff Application - Spiderman**\n\n` +
+          `**Regarding Your Staff Application - Bluqo's Bot**\n\n` +
           `After careful review, we've decided not to move forward with your application at this time.\n\n` +
           `Please don't be discouraged, this isn't a permanent decision. ` +
           `You are welcome to reapply in **1 week**, and we encourage you to use that time to stay active, ` +
@@ -3679,30 +3522,6 @@ async function handleButton(i: ButtonInteraction) {
       storage.removeTicket(i.channel!.id);
       await (i.channel as TextChannel).delete("Ticket closed").catch(() => {});
     }, 5000);
-    return;
-  }
-
-  if (customId === "builder_type_builder" || customId === "builder_type_schematic" || customId === "builder_type_both") {
-    const ticket = storage.getTicket(i.channel!.id);
-    if (ticket && user.id !== ticket.userId && !isStaff(i.member as GuildMember)) {
-      await i.reply({ embeds: [errEmbed("Only the ticket opener can select an application type.")], flags: 64 });
-      return;
-    }
-    const label = customId === "builder_type_builder" ? "Builder" : customId === "builder_type_schematic" ? "Schematic Poster" : "Both (Builder + Schematic Poster)";
-    const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("builder_type_builder").setLabel("Builder").setStyle(ButtonStyle.Primary).setDisabled(true),
-      new ButtonBuilder().setCustomId("builder_type_schematic").setLabel("Schematic Poster").setStyle(ButtonStyle.Secondary).setDisabled(true),
-      new ButtonBuilder().setCustomId("builder_type_both").setLabel("Both").setStyle(ButtonStyle.Success).setDisabled(true),
-    );
-    await i.update({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0xe67e22)
-          .setTitle("Application Type Selected")
-          .setDescription(`<@${user.id}> is applying as: **${label}**`),
-      ],
-      components: [disabledRow],
-    });
     return;
   }
 
@@ -4060,7 +3879,7 @@ async function handleButton(i: ButtonInteraction) {
       await i.deferUpdate();
       const WHITE = 0xffffff;
       await ch.send({ embeds: [
-        new EmbedBuilder().setColor(WHITE).setTitle("Spiderman Rules").addFields({ name: "Section 1 — The Preamble", value: ["────────────────────────────", "By joining (and participating in this server), you agree to follow all established rules, including any updates or changes made in the future.", "", "Please keep your direct messages enabled. If disciplinary action is taken against you, staff will contact you with the reason for the punishment.", "", "The rules listed here are not exhaustive. Staff retain full authority to address behavior that violates the spirit of the community, even if it is not specifically mentioned."].join("\n") }),
+        new EmbedBuilder().setColor(WHITE).setTitle("Bluqo's Bot Rules").addFields({ name: "Section 1 — The Preamble", value: ["────────────────────────────", "By joining (and participating in this server), you agree to follow all established rules, including any updates or changes made in the future.", "", "Please keep your direct messages enabled. If disciplinary action is taken against you, staff will contact you with the reason for the punishment.", "", "The rules listed here are not exhaustive. Staff retain full authority to address behavior that violates the spirit of the community, even if it is not specifically mentioned."].join("\n") }),
       ] });
       await ch.send({ embeds: [
         new EmbedBuilder().setColor(WHITE).addFields({ name: "Section 2 — Terms and Services", value: ["────────────────────────────", "You must listen to [Discord's Terms of Service](https://discord.com/terms) at all times.", "", "By being part of this server, you agree to follow Discord's Community Guidelines to help maintain a safe and respectful environment.", "", "**To join the official V4 server, you must be at least 13 years old.**", "", "Do not discuss, promote, or admit to violating Discord's Terms of Service (e.g., scamming, distributing malicious content, evading bans).", "", "Any content that violates Discord's Terms of Service or Community Guidelines will be removed and may result in disciplinary action, including a ban. This includes, but is not limited to: harassment, scams, malicious links, or sharing inappropriate content."].join("\n") }),
@@ -4278,7 +4097,7 @@ async function handleButton(i: ButtonInteraction) {
         embeds: [embed],
         components: [
           new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder().setCustomId("sa_send_panel").setLabel("📋 Send Staff App Panel").setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId("sa_send_panel").setLabel("Send Staff App Panel").setStyle(ButtonStyle.Primary),
           ),
           backRow("panel_back"),
         ],
@@ -4369,7 +4188,7 @@ async function handleButton(i: ButtonInteraction) {
         embeds: [new EmbedBuilder().setColor(WARNING_COLOR).setDescription(`<@${alert.userId}> warned for spam. **(${count}/5 warnings)**`)],
         components: [],
       });
-      target.user.send({ embeds: [warnDmEmbed("Spamming", count, guild?.name ?? "Spiderman")] }).catch(() => {});
+      target.user.send({ embeds: [warnDmEmbed("Spamming", count, guild?.name ?? "Bluqo's Bot")] }).catch(() => {});
       if (count >= 5 && target.bannable) await target.ban({ reason: "Auto-ban: 5 warnings" }).catch(() => {});
     } else if (action === "kick") {
       if (!target.kickable) { await i.reply({ embeds: [errEmbed("I cannot kick this member.")], flags: 64 }); return; }
@@ -4396,6 +4215,84 @@ async function handleButton(i: ButtonInteraction) {
       });
     }
     return;
+  }
+
+  // Spawner panel buttons
+  if (customId === "sp_list") {
+    if (!guild) return;
+    if (!isStaff(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return; }
+    const spawners = storage.getSpawners();
+    const entries = Object.entries(spawners);
+    if (entries.length === 0) {
+      await i.reply({ embeds: [infoEmbed("No spawner types configured.")], flags: 64 }); return;
+    }
+    const spFields = entries.map(([name, s]) => ({
+      name: `${name} Spawners`,
+      value: `Buy: **${s.buyPrice ?? "N/A"}** | Sell: **${s.sellPrice ?? "N/A"}** | Stock: **${s.stock}**`,
+      inline: false,
+    }));
+    await i.reply({ embeds: [new EmbedBuilder().setColor(SKELLY_CATEGORY.color).setTitle("Spawner Prices and Stock").addFields(...spFields).setTimestamp()], flags: 64 });
+    return;
+  }
+
+  if (customId === "sp_add_stock" || customId === "sp_rem_stock") {
+    if (!guild) return;
+    if (!isStaff(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return; }
+    const isAdd = customId === "sp_add_stock";
+    const stockModal = new ModalBuilder()
+      .setCustomId(isAdd ? "mod_sp_add_stock" : "mod_sp_rem_stock")
+      .setTitle(isAdd ? "Add Spawner Stock" : "Remove Spawner Stock");
+    stockModal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder().setCustomId("sp_type").setLabel("Spawner Type (e.g. Skeleton, Iron Golem)").setStyle(TextInputStyle.Short).setRequired(true),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder().setCustomId("sp_amount").setLabel("Amount").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("e.g. 5"),
+      ),
+    );
+    await i.showModal(stockModal); return;
+  }
+
+  if (customId === "sp_set_price") {
+    if (!guild) return;
+    if (!isOwnerOrCoOwner(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can change prices.")], flags: 64 }); return; }
+    const priceModal = new ModalBuilder().setCustomId("mod_sp_set_price").setTitle("Set Spawner Price");
+    priceModal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder().setCustomId("sp_type").setLabel("Spawner Type (e.g. Skeleton)").setStyle(TextInputStyle.Short).setRequired(true),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder().setCustomId("sp_side").setLabel('Side: "buy" or "sell"').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("buy"),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder().setCustomId("sp_price").setLabel('Price (e.g. 3.3m) or "none" to remove').setStyle(TextInputStyle.Short).setRequired(true),
+      ),
+    );
+    await i.showModal(priceModal); return;
+  }
+
+  if (customId === "sp_add_type") {
+    if (!guild) return;
+    if (!isOwnerOrCoOwner(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can add spawner types.")], flags: 64 }); return; }
+    const addTypeModal = new ModalBuilder().setCustomId("mod_sp_add_type").setTitle("Add Spawner Type");
+    addTypeModal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder().setCustomId("sp_name").setLabel("Spawner Name (e.g. Blaze)").setStyle(TextInputStyle.Short).setRequired(true),
+      ),
+    );
+    await i.showModal(addTypeModal); return;
+  }
+
+  if (customId === "sp_del_type") {
+    if (!guild) return;
+    if (!isOwnerOrCoOwner(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Only the Owner or Co-Owner can delete spawner types.")], flags: 64 }); return; }
+    const delTypeModal = new ModalBuilder().setCustomId("mod_sp_del_type").setTitle("Delete Spawner Type");
+    delTypeModal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder().setCustomId("sp_name").setLabel("Spawner Name to Delete").setStyle(TextInputStyle.Short).setRequired(true),
+      ),
+    );
+    await i.showModal(delTypeModal); return;
   }
 }
 
@@ -5119,6 +5016,75 @@ async function handleModal(i: ModalSubmitInteraction) {
     storage.setCategoryMessage(customId.slice(8), i.fields.getTextInputValue("cat_message"));
     await i.reply({ embeds: [okEmbed("Category message updated.")], flags: 64 }); return;
   }
+
+  if (customId === "mod_sp_add_stock" || customId === "mod_sp_rem_stock") {
+    const spGuild = i.guild;
+    if (!spGuild) return;
+    const isAdd = customId === "mod_sp_add_stock";
+    const typeName = i.fields.getTextInputValue("sp_type").trim();
+    const amountRaw = parseInt(i.fields.getTextInputValue("sp_amount").trim(), 10);
+    if (isNaN(amountRaw) || amountRaw <= 0) {
+      await i.reply({ embeds: [errEmbed("Invalid amount. Enter a positive number.")], flags: 64 }); return;
+    }
+    const delta = isAdd ? amountRaw : -amountRaw;
+    const stockResult = storage.updateSpawnerStock(typeName, delta);
+    if (!stockResult) {
+      await i.reply({ embeds: [errEmbed(`No spawner type matching **${typeName}** found. Use /spawnerpanel and Add Type first.`)], flags: 64 }); return;
+    }
+    const panelRes = await refreshSpawnerPanel(i.client);
+    const panelNote = panelRes.ok ? "\nPanel updated." : `\nPanel not updated: ${panelRes.reason}`;
+    const verb = isAdd ? "Added" : "Removed";
+    await i.reply({ embeds: [okEmbed(`${verb} **${amountRaw}** to **${stockResult.key} Spawners** stock. New stock: **${stockResult.data.stock}**${panelNote}`)], flags: 64 });
+    return;
+  }
+
+  if (customId === "mod_sp_set_price") {
+    const spGuild = i.guild;
+    if (!spGuild) return;
+    const typeName = i.fields.getTextInputValue("sp_type").trim();
+    const sideRaw = i.fields.getTextInputValue("sp_side").trim().toLowerCase();
+    const priceRaw = i.fields.getTextInputValue("sp_price").trim();
+    if (sideRaw !== "buy" && sideRaw !== "sell") {
+      await i.reply({ embeds: [errEmbed('Side must be "buy" or "sell".')], flags: 64 }); return;
+    }
+    const side = sideRaw as "buy" | "sell";
+    const price = priceRaw.toLowerCase() === "none" ? null : priceRaw;
+    const priceResult = storage.setSpawnerPrice(typeName, side, price);
+    if (!priceResult) {
+      await i.reply({ embeds: [errEmbed(`No spawner type matching **${typeName}** found. Add it first via /spawnerpanel.`)], flags: 64 }); return;
+    }
+    const panelRes2 = await refreshSpawnerPanel(i.client);
+    const panelNote2 = panelRes2.ok ? "\nPanel updated." : `\nPanel not updated: ${panelRes2.reason}`;
+    const displayPrice = price === null ? "removed" : `set to **${price}**`;
+    await i.reply({ embeds: [okEmbed(`**${priceResult.key} Spawners** ${side} price ${displayPrice}.${panelNote2}`)], flags: 64 });
+    return;
+  }
+
+  if (customId === "mod_sp_add_type") {
+    const spGuild = i.guild;
+    if (!spGuild) return;
+    const name = i.fields.getTextInputValue("sp_name").trim();
+    const added = storage.addSpawnerType(name);
+    if (!added) {
+      await i.reply({ embeds: [errEmbed(`A spawner type matching **${name}** already exists.`)], flags: 64 }); return;
+    }
+    await i.reply({ embeds: [okEmbed(`Added **${name} Spawners**. Use /spawnerpanel to set prices.`)], flags: 64 });
+    return;
+  }
+
+  if (customId === "mod_sp_del_type") {
+    const spGuild = i.guild;
+    if (!spGuild) return;
+    const name = i.fields.getTextInputValue("sp_name").trim();
+    const deleted = storage.deleteSpawnerType(name);
+    if (!deleted) {
+      await i.reply({ embeds: [errEmbed(`No spawner type matching **${name}** found.`)], flags: 64 }); return;
+    }
+    const panelResDel = await refreshSpawnerPanel(i.client);
+    const panelNoteDel = panelResDel.ok ? "\nPanel updated." : `\nPanel not updated: ${panelResDel.reason}`;
+    await i.reply({ embeds: [okEmbed(`Removed **${deleted} Spawners**.${panelNoteDel}`)], flags: 64 });
+    return;
+  }
 }
 
 async function handleTicketCreate(
@@ -5340,9 +5306,7 @@ function staffAppPanelEmbed() {
 function staffAppPanelComponents() {
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("staff_apply").setLabel("Staff Application 📋").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("sa_builder_apply").setLabel("Builder Application 🏗️").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("sa_schematic_apply").setLabel("Schematic Application 📐").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("staff_apply").setLabel("Staff Application").setStyle(ButtonStyle.Secondary),
     ),
   ];
 }
@@ -5369,10 +5333,10 @@ function ticketPanelEmbed() {
 function ticketPanelComponents() {
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("ticket_btn_support").setLabel("🛡️ Reports & Support").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("ticket_btn_giveaway").setLabel("🎁 Giveaway").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("ticket_btn_skellys").setLabel("💀 Buy/Sell Skellys").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("partnership_ticket").setLabel("🤝 Partnership").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("ticket_btn_support").setLabel("Reports & Support").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("ticket_btn_giveaway").setLabel("Giveaway").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("ticket_btn_skellys").setLabel("Buy/Sell Skellys").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("partnership_ticket").setLabel("Partnership").setStyle(ButtonStyle.Secondary),
     ),
   ];
 }
@@ -5390,14 +5354,14 @@ function getSkellyPriceText(): string {
     const s = key ? spawners[key] : null;
     const price = s?.sellPrice ?? "—";
     const stock = s?.stock ?? 0;
-    lines.push(`• ${name} Spawners: ${price} each | Amount: ${stock}`);
+    lines.push(`- ${name} Spawners: ${price} each | Amount: ${stock}`);
   }
   lines.push("", "**Buying:**");
   for (const name of BUY_SPAWNERS) {
     const key = Object.keys(spawners).find((k) => k.toLowerCase() === name.toLowerCase());
     const s = key ? spawners[key] : null;
     const price = s?.buyPrice ?? "—";
-    lines.push(`• ${name} Spawners: ${price} each`);
+    lines.push(`- ${name} Spawners: ${price} each`);
   }
   lines.push("", "**Notes:**", "Our prices are possibly negotiable", "5x5 minimum", "1 spawner minimum");
   return lines.join("\n");
@@ -5480,8 +5444,8 @@ function farmTicketPanelEmbed() {
 function farmTicketComponents() {
   return [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId("build_service_ticket").setLabel("🏗️ Building Services").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("dig_service_ticket").setLabel("⛏️ Digging Services").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("build_service_ticket").setLabel("Building Services").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("dig_service_ticket").setLabel("Digging Services").setStyle(ButtonStyle.Success),
     ),
   ];
 }
@@ -5555,7 +5519,7 @@ async function runStaffApplication(user: User, guild: Guild) {
       const msg = collected.first()!;
 
       if (msg.content.toLowerCase() === "cancel") {
-        await dm.send({ content: "❌ Application cancelled. You can restart it anytime from the tickets channel." });
+        await dm.send({ content: "Application cancelled. You can restart it anytime from the tickets channel." });
         activeStaffApplications.delete(user.id);
         return;
       }
@@ -5566,8 +5530,8 @@ async function runStaffApplication(user: User, guild: Guild) {
 
     await dm.send({
       content:
-        `✅ **Application Submitted!**\n\n` +
-        `Thank you for applying to be a staff member at **Spiderman**!\n` +
+        `**Application Submitted!**\n\n` +
+        `Thank you for applying to be a staff member at **Bluqo's Bot**!\n` +
         `Your application has been received and will be reviewed by leadership.\n\n` +
         `**Please do not ask about your application status.** You will be contacted if you move forward.`,
     });
@@ -5584,7 +5548,7 @@ async function runStaffApplication(user: User, guild: Guild) {
 
     const embed = new EmbedBuilder()
       .setColor(0x5b8ef5)
-      .setTitle("📋 New Staff Application")
+      .setTitle("New Staff Application")
       .setThumbnail(user.displayAvatarURL())
       .addFields(
         { name: "👤 Applicant", value: `<@${user.id}> (\`${user.tag}\`)`, inline: true },
