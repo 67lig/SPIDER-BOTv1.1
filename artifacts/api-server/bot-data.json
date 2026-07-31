@@ -19,7 +19,7 @@
     }
   },
   "farmDescription": "Buy Farms – For users interested in purchasing a farm. Use this ticket for farm availability, pricing, purchase inquiries, or any questions related to buying a farm.",
-  "farmList": "Available farms:\n\n66m/Hour Basalt Farm: 1.5B\n128m/Hour Basalt Farm 2.4B\n\n** CURRENTLY LOOKING FOR BUILDERS, MAKE A SUPPORT TICKET TO APPLY **\n\n\n\nMining Services: 1k Per Block",
+  "farmList": "",
   "skellyDescription": ":skelly:  Buy/Sell Skellys – For purchase questions, payment issues, donation inquiries, reward claims, or buying/selling Skelly Spawners.",
   "categoryMessages": {},
   "ticketPanelTitle": "Support Tickets",
@@ -391,43 +391,43 @@
   "appBlacklist": {},
   "spawners": {
     "Skeleton": {
-      "buyPrice": "3.3m",
-      "sellPrice": "3.9m",
-      "stock": 619
+      "buyPrice": null,
+      "sellPrice": null,
+      "stock": 0
     },
     "Iron Golem": {
-      "buyPrice": "5.5m",
-      "sellPrice": "9m",
+      "buyPrice": null,
+      "sellPrice": null,
       "stock": 0
     },
     "Blaze": {
-      "buyPrice": "2m",
+      "buyPrice": null,
       "sellPrice": null,
       "stock": 0
     },
     "Pig": {
-      "buyPrice": "2m",
+      "buyPrice": null,
       "sellPrice": null,
       "stock": 0
     },
     "Cow": {
-      "buyPrice": "2m",
+      "buyPrice": null,
       "sellPrice": null,
       "stock": 0
     },
     "Spider": {
-      "buyPrice": "4m",
+      "buyPrice": null,
       "sellPrice": null,
       "stock": 0
     },
     "Piglin": {
-      "buyPrice": "5m",
+      "buyPrice": null,
       "sellPrice": null,
       "stock": 0
     },
     "Creeper": {
-      "buyPrice": "5m",
-      "sellPrice": "8m",
+      "buyPrice": null,
+      "sellPrice": null,
       "stock": 0
     }
   }

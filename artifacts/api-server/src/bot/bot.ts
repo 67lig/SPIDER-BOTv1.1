@@ -1702,6 +1702,10 @@ function isStaff(m: GuildMember) {
 function isMod(m: GuildMember) {
   return isOwnerOrCoOwner(m) || MOD_ROLE_IDS.some((id) => m.roles.cache.has(id));
 }
+// Moderator (Mod 3) and above — can view other staff members' tasks
+function isModeratorOrAbove(m: GuildMember) {
+  return isOwnerOrCoOwner(m) || MOD_ROLE_IDS.slice(2).some((id) => m.roles.cache.has(id));
+}
 function canUseModLog(m: GuildMember) {
   return isStaff(m) || m.roles.cache.has(MODLOG_STAFF_ROLE_ID);
 }
@@ -2504,8 +2508,8 @@ async function handleCommand(i: ChatInputCommandInteraction) {
 
     const targetUser = i.options.getUser("user", false);
 
-    // Viewing another user requires mod+ permission
-    if (targetUser && targetUser.id !== user.id && !isMod(member)) {
+    // Viewing another user requires Moderator (Mod 3) or above
+    if (targetUser && targetUser.id !== user.id && !isModeratorOrAbove(member)) {
       await i.reply({ embeds: [errEmbed("You need to be a Moderator or above to view another member's tasks.")], flags: 64 });
       return;
     }
@@ -2522,7 +2526,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
 
     const isBuilder  = subjectMember?.roles.cache.has(BUILD_TICKET_ROLE_ID) ?? false;
     const isGiveawayMgr = subjectMember?.roles.cache.has(GIVEAWAY_ROLE_ID) ?? false;
-    const viewerIsMod = isMod(member); // only mods+ can see others; they always see all fields
+    const viewerIsMod = isModeratorOrAbove(member); // Mod 3+ see all fields and can view others
 
     // ── Build embed ──────────────────────────────────────────────────────────
     const embed = new EmbedBuilder()
@@ -5231,30 +5235,38 @@ async function handleTicketCreate(
   }
   if (existingId) storage.removeTicket(existingId);
 
-  let discordCategory = guild.channels.cache.find(
-    (c) => c.type === ChannelType.GuildCategory && c.name === cat.discordCategoryName,
-  ) as CategoryChannel | undefined;
-
-  if (!discordCategory) {
-    discordCategory = await guild.channels.create({
-      name: cat.discordCategoryName,
-      type: ChannelType.GuildCategory,
-      permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }],
-    });
+  // Verify bot member is cached before attempting channel creation
+  const botMemberId = guild.members.me?.id;
+  if (!botMemberId) {
+    await i.editReply({ embeds: [errEmbed("Internal error: bot member not found. Please try again in a moment.")] });
+    return;
   }
+
+  try {
+    let discordCategory = guild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildCategory && c.name === cat.discordCategoryName,
+    ) as CategoryChannel | undefined;
+
+    if (!discordCategory) {
+      discordCategory = await guild.channels.create({
+        name: cat.discordCategoryName,
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }],
+      });
+    }
 
   const ticketNum = storage.nextTicketNumber();
   const safeName = user.username.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18) || "user";
   const channelName = `${cat.channelPrefix}-${safeName}`;
 
-  const overwrites: Parameters<Guild["channels"]["create"]>[0]["permissionOverwrites"] = [
+  const overwrites: import("discord.js").OverwriteResolvable[] = [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
     {
       id: user.id,
       allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks],
     },
     {
-      id: guild.members.me!.id,
+      id: botMemberId,
       allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages],
     },
   ];
@@ -5361,6 +5373,13 @@ async function handleTicketCreate(
         ,
     ],
   });
+  } catch (err: unknown) {
+    logger.error({ err }, "Ticket creation failed");
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (i.deferred || i.replied) {
+      await i.editReply({ embeds: [errEmbed(`Failed to create ticket. Please try again or contact an admin. (${errMsg})`)] }).catch(() => {});
+    }
+  }
 }
 
 function backRow(target: string) {
