@@ -917,6 +917,11 @@ export function createBotClient(): Client | null {
       return; // skip all other processing for counting channel messages
     }
 
+    // ── Staff task message tracking ──────────────────────────────────────────
+    if (msg.guild && msg.member && isStaff(msg.member as GuildMember)) {
+      storage.incrementMessages(msg.author.id);
+    }
+
     // ── XP tracking + level-up announcements ──
     if (msg.guild) {
       void (async () => {
@@ -1516,6 +1521,12 @@ async function registerCommands(client: Client) {
       .addSubcommand((sub) =>
         sub.setName("list").setDescription("List all active reaction roles"),
       ),
+    new SlashCommandBuilder()
+      .setName("stafftasks")
+      .setDescription("View your staff performance ledger")
+      .addUserOption((o) =>
+        o.setName("user").setDescription("View another staff member's tasks (mod+ only)").setRequired(false),
+      ),
   ].map((c) => c.toJSON());
 
   try {
@@ -1778,6 +1789,29 @@ async function closeTicket(
 
   if (logCh) {
     await logCh.send({ embeds: [closeEmbed] }).catch(() => {});
+  }
+
+  // ── Staff task tracking ───────────────────────────────────────────────────
+  // Only credit the closer when a staff member (not the ticket owner) closes.
+  if (closedById !== ticket.userId) {
+    const isBuildTicket = ticket.categoryId === "buy-farms" || ticket.categoryId === "build";
+    if (isBuildTicket) {
+      storage.incrementBuildsCompleted(closedById);
+    } else if (ticket.categoryId === "giveaway-claim") {
+      // For giveaway-claim tickets closed with "paid" → credit the giveaway host
+      if (/paid/i.test(reason) && ticket.giveawayId) {
+        const gw = storage.getGiveaway(ticket.giveawayId);
+        if (gw) {
+          const parsed = parsePriceInput(gw.prize);
+          if (parsed && parsed > 0) {
+            storage.addSponsoredAmount(gw.hostId, parsed);
+          }
+        }
+      }
+      storage.incrementStaffHandled(closedById);
+    } else {
+      storage.incrementStaffHandled(closedById);
+    }
   }
 }
 
@@ -2460,6 +2494,86 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     return;
   }
 
+  if (commandName === "stafftasks") {
+    if (!guild) return;
+    const member = i.member as GuildMember;
+    if (!isStaff(member)) {
+      await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 });
+      return;
+    }
+
+    const targetUser = i.options.getUser("user", false);
+
+    // Viewing another user requires mod+ permission
+    if (targetUser && targetUser.id !== user.id && !isMod(member)) {
+      await i.reply({ embeds: [errEmbed("You need to be a Moderator or above to view another member's tasks.")], flags: 64 });
+      return;
+    }
+
+    const viewSelf = !targetUser || targetUser.id === user.id;
+    const subjectId = viewSelf ? user.id : targetUser!.id;
+    const subjectUser = viewSelf ? user : targetUser!;
+
+    // Fetch the subject's guild member so we can check their roles for label customisation
+    const subjectMember = guild.members.cache.get(subjectId)
+      ?? await guild.members.fetch(subjectId).catch(() => null);
+
+    const tasks = storage.getStaffTask(subjectId);
+
+    const isBuilder  = subjectMember?.roles.cache.has(BUILD_TICKET_ROLE_ID) ?? false;
+    const isGiveawayMgr = subjectMember?.roles.cache.has(GIVEAWAY_ROLE_ID) ?? false;
+    const viewerIsMod = isMod(member); // only mods+ can see others; they always see all fields
+
+    // ── Build embed ──────────────────────────────────────────────────────────
+    const embed = new EmbedBuilder()
+      .setColor(BOT_COLOR)
+      .setTitle("📋 Taskbook Tasks")
+      .setDescription(
+        viewSelf
+          ? "Staff performance ledger · auto-tracked on ticket actions"
+          : `Staff performance ledger for <@${subjectId}> · auto-tracked on ticket actions`,
+      )
+      .setThumbnail(subjectUser.displayAvatarURL())
+      .setFooter({ text: viewSelf ? `Your stats, ${user.username}` : `Viewing ${subjectUser.username}'s stats` })
+      .setTimestamp();
+
+    // Tickets Renamed — all staff
+    embed.addFields({ name: "🏷️ Tickets Renamed", value: `${tasks.ticketsRenamed}`, inline: true });
+
+    // Tickets Handled / Builds Complete — label depends on role
+    if (!viewerIsMod && isBuilder) {
+      // Builder viewing own stats: show builds
+      embed.addFields({ name: "🔨 Builds Complete", value: `${tasks.buildsCompleted}`, inline: true });
+    } else if (!viewerIsMod && !isBuilder) {
+      // Non-builder staff viewing own stats: show handled
+      embed.addFields({ name: "📋 Tickets Handled", value: `${tasks.ticketsHandled}`, inline: true });
+    } else {
+      // Mod+ viewing someone else (or own): show both
+      embed.addFields(
+        { name: "📋 Tickets Handled", value: `${tasks.ticketsHandled}`, inline: true },
+        { name: "🔨 Builds Complete", value: `${tasks.buildsCompleted}`, inline: true },
+      );
+    }
+
+    // Sponsored Amount — always shown if giveaway manager, or if mod+ is viewing
+    if (isGiveawayMgr || viewerIsMod) {
+      const sponsoredDisplay = tasks.sponsoredAmount >= 1_000_000_000
+        ? `${(tasks.sponsoredAmount / 1_000_000_000).toFixed(2)}b`
+        : tasks.sponsoredAmount >= 1_000_000
+        ? `${(tasks.sponsoredAmount / 1_000_000).toFixed(2)}m`
+        : tasks.sponsoredAmount >= 1_000
+        ? `${(tasks.sponsoredAmount / 1_000).toFixed(1)}k`
+        : `${tasks.sponsoredAmount}`;
+      embed.addFields({ name: "💎 Sponsored Amount", value: sponsoredDisplay, inline: true });
+    }
+
+    // Messages — always shown
+    embed.addFields({ name: "💬 Messages Sent", value: `${tasks.messagesSent}`, inline: true });
+
+    await i.reply({ embeds: [embed], flags: 64 });
+    return;
+  }
+
   if (commandName === "purge") {
     const member = i.member as GuildMember;
     if (!isStaff(member)) {
@@ -2628,6 +2742,7 @@ async function handleCommand(i: ChatInputCommandInteraction) {
     if (!isStaff(i.member as GuildMember)) { await i.reply({ embeds: [errEmbed("Staff only.")], flags: 64 }); return; }
     const newName = i.options.getString("name", true).toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 90);
     await (channel as TextChannel).setName(newName);
+    storage.incrementStaffRename(user.id);
     await i.reply({ embeds: [okEmbed(`Channel renamed to **${newName}**`)] });
     return;
   }
@@ -2813,13 +2928,13 @@ async function handleCommand(i: ChatInputCommandInteraction) {
       .setTimestamp();
     const spRow1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("sp_list").setLabel("List").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("sp_add_stock").setLabel("Add Stock").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("sp_rem_stock").setLabel("Remove Stock").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("sp_set_price").setLabel("Set Price").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("sp_add_stock").setLabel("Add Stock").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("sp_rem_stock").setLabel("Remove Stock").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("sp_set_price").setLabel("Set Price").setStyle(ButtonStyle.Secondary),
     );
     const spRow2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId("sp_add_type").setLabel("Add Type").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("sp_del_type").setLabel("Delete Type").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("sp_del_type").setLabel("Delete Type").setStyle(ButtonStyle.Secondary),
     );
     await i.reply({ embeds: [spEmbed], components: [spRow1, spRow2], flags: 64 });
     return;
@@ -3309,6 +3424,7 @@ async function handleButton(i: ButtonInteraction) {
       channelId: ticketChannel.id,
       createdAt: new Date().toISOString(),
       ticketNumber: ticketNum,
+      giveawayId: gwId,
     });
 
     const logCh = guild.channels.cache.get(TICKET_LOG_CHANNEL_ID) as TextChannel | undefined;
@@ -5343,27 +5459,33 @@ function ticketPanelComponents() {
 
 const SKELLY_PRICE_CHANNEL = "https://discord.com/channels/1450662191890956322/1518633695404101773";
 
+// Emoji map for well-known spawner types; fallback to 🧱
+function spawnerEmoji(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("skeleton") || n.includes("skelly")) return "💀";
+  if (n.includes("creeper")) return "💚";
+  if (n.includes("iron golem") || n.includes("iron_golem")) return "🤖";
+  if (n.includes("zombie")) return "🧟";
+  if (n.includes("spider")) return "🕷️";
+  if (n.includes("blaze")) return "🔥";
+  if (n.includes("cave spider")) return "🕸️";
+  if (n.includes("enderman")) return "🖤";
+  return "🧱";
+}
+
 function getSkellyPriceText(): string {
   const spawners = storage.getSpawners();
-  const BUY_SPAWNERS = ["Skeleton", "Creeper", "Iron Golem"];
-  const SELL_SPAWNERS = ["Skeleton", "Creeper", "Iron Golem"];
   const lines: string[] = [];
-  lines.push("**Selling:**");
-  for (const name of SELL_SPAWNERS) {
-    const key = Object.keys(spawners).find((k) => k.toLowerCase() === name.toLowerCase());
-    const s = key ? spawners[key] : null;
-    const price = s?.sellPrice ?? "—";
-    const stock = s?.stock ?? 0;
-    lines.push(`- ${name} Spawners: ${price} each | Amount: ${stock}`);
+  for (const [name, s] of Object.entries(spawners)) {
+    const inStock = (s.stock ?? 0) > 0;
+    const stockLabel = inStock ? `${s.stock} in stock` : "out of stock";
+    const buy  = s.buyPrice  ?? "—";
+    const sell = s.sellPrice ?? "—";
+    lines.push(`${spawnerEmoji(name)} **${name} Spawner** · ${stockLabel}`);
+    lines.push(`🟢 Buy: ${buy}  🔴 Sell: ${sell}`);
+    lines.push("");
   }
-  lines.push("", "**Buying:**");
-  for (const name of BUY_SPAWNERS) {
-    const key = Object.keys(spawners).find((k) => k.toLowerCase() === name.toLowerCase());
-    const s = key ? spawners[key] : null;
-    const price = s?.buyPrice ?? "—";
-    lines.push(`- ${name} Spawners: ${price} each`);
-  }
-  lines.push("", "**Notes:**", "Our prices are possibly negotiable", "5x5 minimum", "1 spawner minimum");
+  lines.push("*Prices may be negotiable · 5×5 min · 1 spawner min*");
   return lines.join("\n");
 }
 
@@ -5383,16 +5505,52 @@ async function refreshSpawnerPanel(client: Client): Promise<{ ok: boolean; reaso
 }
 
 function skellyTicketPanelEmbed() {
+  const spawners = storage.getSpawners();
+  const entries = Object.entries(spawners);
+
+  const inStock  = entries.filter(([, s]) => (s.stock ?? 0) > 0);
+  const outStock = entries.filter(([, s]) => (s.stock ?? 0) === 0);
+
+  const lines: string[] = [];
+
+  // ── Available section ─────────────────────────────────────────────────────
+  if (inStock.length > 0) {
+    lines.push("**Available**");
+    lines.push("");
+    for (const [name, s] of inStock) {
+      lines.push(`${spawnerEmoji(name)} **${name} Spawner** · ${s.stock} in stock`);
+      if (s.buyPrice)  lines.push(`🟢 Buy price: ${s.buyPrice}`);
+      if (s.sellPrice) lines.push(`🔴 Sell price: ${s.sellPrice}`);
+      lines.push("");
+    }
+  }
+
+  // ── Out of Stock section (hidden when everything is in stock) ─────────────
+  if (outStock.length > 0) {
+    lines.push("**Out of Stock**");
+    lines.push("*You can still open a Buy ticket · we fill it on restock.*");
+    lines.push("");
+    for (const [name, s] of outStock) {
+      lines.push(`${spawnerEmoji(name)} ~~${name} Spawner~~ · out of stock`);
+      if (s.buyPrice)  lines.push(`🟢 Buy price: ${s.buyPrice}`);
+      if (s.sellPrice) lines.push(`🔴 Sell price: ${s.sellPrice}`);
+      lines.push("");
+    }
+  }
+
+  // ── Footer note ───────────────────────────────────────────────────────────
+  lines.push("🟢 Buy = you buy from us · 🔴 Sell = you sell to us");
+
   return new EmbedBuilder()
     .setColor(SKELLY_CATEGORY.color)
-    .setTitle("Spawner Prices")
-    .setDescription(`${getSkellyPriceText()}\n\nSee <#1518633695404101773> for more details.\nOpen a ticket below to buy or sell.`)
+    .setTitle("🧱 Spawner Shop")
+    .setDescription(lines.join("\n"))
     .setTimestamp();
 }
 
 function skellyTicketComponents() {
-  const buyBtn = new ButtonBuilder().setCustomId("skelly_buy").setLabel("Buy Spawners").setStyle(ButtonStyle.Success);
-  const sellBtn = new ButtonBuilder().setCustomId("skelly_sell").setLabel("Sell Spawners").setStyle(ButtonStyle.Primary);
+  const buyBtn  = new ButtonBuilder().setCustomId("skelly_buy").setLabel("⬇️ Buy").setStyle(ButtonStyle.Primary);
+  const sellBtn = new ButtonBuilder().setCustomId("skelly_sell").setLabel("⬆️ Sell").setStyle(ButtonStyle.Secondary);
   return [new ActionRowBuilder<ButtonBuilder>().addComponents(buyBtn, sellBtn)];
 }
 

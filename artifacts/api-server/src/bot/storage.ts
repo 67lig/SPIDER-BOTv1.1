@@ -82,6 +82,15 @@ export interface TicketEntry {
   claimedBy?: string;
   claimedById?: string;
   joinedStaff?: string[];
+  giveawayId?: string; // set for giveaway-claim tickets
+}
+
+export interface StaffTaskEntry {
+  ticketsRenamed: number;
+  ticketsHandled: number;   // non-build tickets closed (support, skelly, giveaway, etc.)
+  buildsCompleted: number;  // build/farm tickets closed
+  sponsoredAmount: number;  // total giveaway prize value paid out (tracked per giveaway host)
+  messagesSent: number;
 }
 
 export interface WarnEntry {
@@ -187,6 +196,7 @@ interface BotData {
     current: number;    // next expected number (starts at 1)
     lastUserId: string; // user who sent the last correct number
   };
+  staffTasks: Record<string, StaffTaskEntry>;
 }
 
 // Store data OUTSIDE the workspace so it is never overwritten by deployments or git.
@@ -228,6 +238,7 @@ function defaultData(): BotData {
     violationLog: {},
     invites: { byInviter: {}, byInvitee: {} },
     counting: { current: 1, lastUserId: "" },
+    staffTasks: {},
     spawners: {
       "Skeleton":   { buyPrice: "4.1m", sellPrice: "5m",  stock: 0 },
       "Creeper":    { buyPrice: "5m",   sellPrice: "8m",  stock: 0 },
@@ -828,6 +839,62 @@ export const storage = {
     if (!_data.counting) _data.counting = { current: 1, lastUserId: "" };
     _data.counting.current = current;
     _data.counting.lastUserId = lastUserId;
+    saveData(_data);
+  },
+
+  // ── Staff tasks (performance ledger) ─────────────────────────────────────
+  getStaffTask(userId: string): StaffTaskEntry {
+    if (!_data.staffTasks) _data.staffTasks = {};
+    return _data.staffTasks[userId] ?? {
+      ticketsRenamed: 0,
+      ticketsHandled: 0,
+      buildsCompleted: 0,
+      sponsoredAmount: 0,
+      messagesSent: 0,
+    };
+  },
+
+  getAllStaffTasks(): Record<string, StaffTaskEntry> {
+    return _data.staffTasks ?? {};
+  },
+
+  incrementStaffRename(userId: string): void {
+    if (!_data.staffTasks) _data.staffTasks = {};
+    const e = this.getStaffTask(userId);
+    e.ticketsRenamed++;
+    _data.staffTasks[userId] = e;
+    saveData(_data);
+  },
+
+  incrementStaffHandled(userId: string): void {
+    if (!_data.staffTasks) _data.staffTasks = {};
+    const e = this.getStaffTask(userId);
+    e.ticketsHandled++;
+    _data.staffTasks[userId] = e;
+    saveData(_data);
+  },
+
+  incrementBuildsCompleted(userId: string): void {
+    if (!_data.staffTasks) _data.staffTasks = {};
+    const e = this.getStaffTask(userId);
+    e.buildsCompleted++;
+    _data.staffTasks[userId] = e;
+    saveData(_data);
+  },
+
+  addSponsoredAmount(userId: string, amount: number): void {
+    if (!_data.staffTasks) _data.staffTasks = {};
+    const e = this.getStaffTask(userId);
+    e.sponsoredAmount += amount;
+    _data.staffTasks[userId] = e;
+    saveData(_data);
+  },
+
+  incrementMessages(userId: string): void {
+    if (!_data.staffTasks) _data.staffTasks = {};
+    const e = this.getStaffTask(userId);
+    e.messagesSent++;
+    _data.staffTasks[userId] = e;
     saveData(_data);
   },
 };
