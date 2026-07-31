@@ -3386,15 +3386,6 @@ async function handleButton(i: ButtonInteraction) {
             PermissionFlagsBits.ManageMessages,
           ],
         },
-        {
-          id: GENERAL_TICKET_ROLE_ID,
-          allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory,
-            PermissionFlagsBits.AttachFiles,
-          ],
-        },
       ],
     });
 
@@ -3861,8 +3852,6 @@ async function handleButton(i: ButtonInteraction) {
         { id: guild.roles.everyone.id,  deny: [PermissionFlagsBits.ViewChannel] },
         { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
         { id: guild.members.me!.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] },
-        { id: OWNER_ROLE_ID,    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-        { id: CO_OWNER_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
       ],
     });
     const welcomeEmbed = new EmbedBuilder()
@@ -3875,7 +3864,7 @@ async function handleButton(i: ButtonInteraction) {
       )
       .setTimestamp();
     await ticketChannel.send({
-      content: `<@${user.id}> <@&${OWNER_ROLE_ID}> <@&${CO_OWNER_ROLE_ID}>`,
+      content: `<@${user.id}>`,
       embeds: [welcomeEmbed],
       components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId("ticket_close").setLabel("Close Ticket").setStyle(ButtonStyle.Danger),
@@ -4760,8 +4749,6 @@ async function handleModal(i: ModalSubmitInteraction) {
         { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
         { id: guild.members.me!.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] },
-        { id: BUILD_TICKET_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
-        { id: STAFF_ROLE_IDS[0]!, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
       ],
     });
     const welcomeEmbed = new EmbedBuilder()
@@ -4779,7 +4766,7 @@ async function handleModal(i: ModalSubmitInteraction) {
       .setFooter({ text: `Formula: ${dimX} × ${dimY} × ${dimZ} × $950` })
       .setTimestamp();
     await ticketChannel.send({
-      content: `<@${user.id}> <@&${BUILD_TICKET_ROLE_ID}>`,
+      content: `<@${user.id}>`,
       embeds: [welcomeEmbed],
       components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId("ticket_claim").setLabel("Claim Ticket").setStyle(ButtonStyle.Primary),
@@ -4842,14 +4829,6 @@ async function handleModal(i: ModalSubmitInteraction) {
         {
           id: guild.members.me!.id,
           allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages],
-        },
-        {
-          id: BUILD_TICKET_ROLE_ID,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
-        },
-        {
-          id: STAFF_ROLE_IDS[0]!,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
         },
       ],
     });
@@ -5027,14 +5006,6 @@ async function handleModal(i: ModalSubmitInteraction) {
           id: guild.members.me!.id,
           allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages],
         },
-        {
-          id: SKELLY_TICKET_ROLE_ID,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
-        },
-        ...MOD_ROLE_IDS.map((roleId) => ({
-          id: roleId,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
-        })),
       ],
     });
 
@@ -5060,7 +5031,7 @@ async function handleModal(i: ModalSubmitInteraction) {
       new ButtonBuilder().setCustomId("ticket_close").setLabel("Close Ticket").setStyle(ButtonStyle.Danger),
     );
 
-    await ticketChannel.send({ content: `<@${user.id}> <@&${SKELLY_TICKET_ROLE_ID}>`, embeds: [welcomeEmbed], components: [controlRow] });
+    await ticketChannel.send({ content: `<@${user.id}>`, embeds: [welcomeEmbed], components: [controlRow] });
 
     storage.addTicket(ticketChannel.id, {
       userId: user.id,
@@ -5271,18 +5242,6 @@ async function handleTicketCreate(
     },
   ];
 
-  if (isFarm) {
-    overwrites.push({
-      id: BUILD_TICKET_ROLE_ID,
-      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
-    });
-  } else {
-    overwrites.push({
-      id: GENERAL_TICKET_ROLE_ID,
-      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
-    });
-  }
-
   const ticketChannel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
@@ -5309,7 +5268,7 @@ async function handleTicketCreate(
     new ButtonBuilder().setCustomId("ticket_close").setLabel("Close Ticket").setStyle(ButtonStyle.Danger),
   );
 
-  const ping = `<@${user.id}> <@&${GENERAL_TICKET_ROLE_ID}>`;
+  const ping = `<@${user.id}>`;
   await ticketChannel.send({ content: ping, embeds: [welcomeEmbed], components: [controlRow] });
 
   if (categoryId === "builder-application") {
