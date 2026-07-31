@@ -269,6 +269,25 @@ function parsePriceInput(input: string): number | null {
   return Math.round(n);
 }
 
+// Scans a free-form prize string and returns the first recognisable amount.
+// Handles "20m", "10m each", "20 million 10m each", "1.5b", "100k", etc.
+function parsePrizeAmount(prize: string): number | null {
+  const s = prize.replace(/[$,]/g, "").toLowerCase();
+  // Match NUMBER optionally followed by a unit word or letter
+  const re = /(\d+(?:\.\d+)?)\s*(billion|million|thousand|b|m|k)?/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(s)) !== null) {
+    const n = parseFloat(match[1]);
+    const unit = (match[2] ?? "").trim();
+    if (unit === "b" || unit === "billion")   return Math.round(n * 1_000_000_000);
+    if (unit === "m" || unit === "million")   return Math.round(n * 1_000_000);
+    if (unit === "k" || unit === "thousand")  return Math.round(n * 1_000);
+    // bare number with no unit — only use if it's large enough to be meaningful
+    if (n >= 1_000) return Math.round(n);
+  }
+  return null;
+}
+
 function formatPriceDisplay(amount: number, originalInput: string): string {
   const upper = originalInput.replace(/[$,\s]/g, "").toUpperCase();
   if (/^[\d.]+[KMB]$/.test(upper)) return `$${upper}`;
@@ -1897,7 +1916,7 @@ async function closeTicket(
       if (/paid/i.test(reason) && ticket.giveawayId) {
         const gw = storage.getGiveaway(ticket.giveawayId);
         if (gw) {
-          const parsed = parsePriceInput(gw.prize);
+          const parsed = parsePrizeAmount(gw.prize);
           if (parsed && parsed > 0) {
             storage.addSponsoredAmount(gw.hostId, parsed);
           }

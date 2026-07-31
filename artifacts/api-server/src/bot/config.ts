@@ -7,8 +7,8 @@ export const OWNER_IDS: string[] = [
 export const OWNER_ID = "1491457883219693720";
 
 // ── Roles ─────────────────────────────────────────────────────────────────────
-export const OWNER_ROLE_ID      = "1531169031648972910"; // Mod 5 (highest non-user role)
-export const CO_OWNER_ROLE_ID   = "1531169031648972910"; // Mod 5
+export const OWNER_ROLE_ID      = "1532808512521113814"; // current owner role
+export const CO_OWNER_ROLE_ID   = "1532808512521113814"; // current owner role
 export const BUILD_TICKET_ROLE_ID    = "1531375209968308274";
 export const GIVEAWAY_ROLE_ID        = "1531375074240626790";
 export const GENERAL_TICKET_ROLE_ID  = "1531299742364078200";
