@@ -5459,33 +5459,21 @@ function ticketPanelComponents() {
 
 const SKELLY_PRICE_CHANNEL = "https://discord.com/channels/1450662191890956322/1518633695404101773";
 
-// Emoji map for well-known spawner types; fallback to 🧱
-function spawnerEmoji(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes("skeleton") || n.includes("skelly")) return "💀";
-  if (n.includes("creeper")) return "💚";
-  if (n.includes("iron golem") || n.includes("iron_golem")) return "🤖";
-  if (n.includes("zombie")) return "🧟";
-  if (n.includes("spider")) return "🕷️";
-  if (n.includes("blaze")) return "🔥";
-  if (n.includes("cave spider")) return "🕸️";
-  if (n.includes("enderman")) return "🖤";
-  return "🧱";
-}
-
 function getSkellyPriceText(): string {
   const spawners = storage.getSpawners();
   const lines: string[] = [];
+  lines.push("**Selling:**");
   for (const [name, s] of Object.entries(spawners)) {
-    const inStock = (s.stock ?? 0) > 0;
-    const stockLabel = inStock ? `${s.stock} in stock` : "out of stock";
-    const buy  = s.buyPrice  ?? "—";
-    const sell = s.sellPrice ?? "—";
-    lines.push(`${spawnerEmoji(name)} **${name} Spawner** · ${stockLabel}`);
-    lines.push(`🟢 Buy: ${buy}  🔴 Sell: ${sell}`);
-    lines.push("");
+    const price = s.sellPrice ?? "—";
+    const stock = s.stock ?? 0;
+    lines.push(`- ${name} Spawners: ${price} each | Amount: ${stock}`);
   }
-  lines.push("*Prices may be negotiable · 5×5 min · 1 spawner min*");
+  lines.push("", "**Buying:**");
+  for (const [name, s] of Object.entries(spawners)) {
+    const price = s.buyPrice ?? "—";
+    lines.push(`- ${name} Spawners: ${price} each`);
+  }
+  lines.push("", "**Notes:**", "Our prices are possibly negotiable", "5x5 minimum", "1 spawner minimum");
   return lines.join("\n");
 }
 
@@ -5505,52 +5493,19 @@ async function refreshSpawnerPanel(client: Client): Promise<{ ok: boolean; reaso
 }
 
 function skellyTicketPanelEmbed() {
-  const spawners = storage.getSpawners();
-  const entries = Object.entries(spawners);
-
-  const inStock  = entries.filter(([, s]) => (s.stock ?? 0) > 0);
-  const outStock = entries.filter(([, s]) => (s.stock ?? 0) === 0);
-
-  const lines: string[] = [];
-
-  // ── Available section ─────────────────────────────────────────────────────
-  if (inStock.length > 0) {
-    lines.push("**Available**");
-    lines.push("");
-    for (const [name, s] of inStock) {
-      lines.push(`${spawnerEmoji(name)} **${name} Spawner** · ${s.stock} in stock`);
-      if (s.buyPrice)  lines.push(`🟢 Buy price: ${s.buyPrice}`);
-      if (s.sellPrice) lines.push(`🔴 Sell price: ${s.sellPrice}`);
-      lines.push("");
-    }
-  }
-
-  // ── Out of Stock section (hidden when everything is in stock) ─────────────
-  if (outStock.length > 0) {
-    lines.push("**Out of Stock**");
-    lines.push("*You can still open a Buy ticket · we fill it on restock.*");
-    lines.push("");
-    for (const [name, s] of outStock) {
-      lines.push(`${spawnerEmoji(name)} ~~${name} Spawner~~ · out of stock`);
-      if (s.buyPrice)  lines.push(`🟢 Buy price: ${s.buyPrice}`);
-      if (s.sellPrice) lines.push(`🔴 Sell price: ${s.sellPrice}`);
-      lines.push("");
-    }
-  }
-
-  // ── Footer note ───────────────────────────────────────────────────────────
-  lines.push("🟢 Buy = you buy from us · 🔴 Sell = you sell to us");
-
+  const updatedTs = Math.floor(Date.now() / 1000);
   return new EmbedBuilder()
     .setColor(SKELLY_CATEGORY.color)
-    .setTitle("🧱 Spawner Shop")
-    .setDescription(lines.join("\n"))
+    .setTitle("Spawner Prices")
+    .setDescription(
+      `Last updated: <t:${updatedTs}:R>\n\n${getSkellyPriceText()}\n\nSee <#1518633695404101773> for more details.\nOpen a ticket below to buy or sell.`,
+    )
     .setTimestamp();
 }
 
 function skellyTicketComponents() {
-  const buyBtn  = new ButtonBuilder().setCustomId("skelly_buy").setLabel("⬇️ Buy").setStyle(ButtonStyle.Primary);
-  const sellBtn = new ButtonBuilder().setCustomId("skelly_sell").setLabel("⬆️ Sell").setStyle(ButtonStyle.Secondary);
+  const buyBtn  = new ButtonBuilder().setCustomId("skelly_buy").setLabel("Buy Spawners").setStyle(ButtonStyle.Success);
+  const sellBtn = new ButtonBuilder().setCustomId("skelly_sell").setLabel("Sell Spawners").setStyle(ButtonStyle.Primary);
   return [new ActionRowBuilder<ButtonBuilder>().addComponents(buyBtn, sellBtn)];
 }
 
