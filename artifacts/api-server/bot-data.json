@@ -395,37 +395,12 @@
       "sellPrice": null,
       "stock": 0
     },
-    "Iron Golem": {
-      "buyPrice": null,
-      "sellPrice": null,
-      "stock": 0
-    },
-    "Blaze": {
-      "buyPrice": null,
-      "sellPrice": null,
-      "stock": 0
-    },
-    "Pig": {
-      "buyPrice": null,
-      "sellPrice": null,
-      "stock": 0
-    },
-    "Cow": {
-      "buyPrice": null,
-      "sellPrice": null,
-      "stock": 0
-    },
-    "Spider": {
-      "buyPrice": null,
-      "sellPrice": null,
-      "stock": 0
-    },
-    "Piglin": {
-      "buyPrice": null,
-      "sellPrice": null,
-      "stock": 0
-    },
     "Creeper": {
+      "buyPrice": null,
+      "sellPrice": null,
+      "stock": 0
+    },
+    "Iron Golem": {
       "buyPrice": null,
       "sellPrice": null,
       "stock": 0
