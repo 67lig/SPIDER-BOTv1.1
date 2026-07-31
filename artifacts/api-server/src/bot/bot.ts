@@ -244,7 +244,7 @@ async function fetchVaultBalance(): Promise<number | null> {
   try {
     const headers: Record<string, string> = {};
     if (DONUTSMP_API_KEY) headers["Authorization"] = `Bearer ${DONUTSMP_API_KEY}`;
-    const r = await fetch("https://api.donutsmp.net/v1/stats/___Vault___", { headers });
+    const r = await fetch("https://api.donutsmp.net/v1/stats/BluqoYT", { headers });
     const json = (await r.json()) as { status: number; result?: { money: string } };
     logger.debug({ httpStatus: r.status, apiStatus: json.status, money: json.result?.money }, "fetchVaultBalance response");
     if (json.status !== 200 || !json.result) {
@@ -290,7 +290,7 @@ function buildPaymentEmbed(price: number, priceStr: string): EmbedBuilder {
     .setDescription(
       `Please pay the following **before** the build starts:\n\n` +
       `**💸 Payments**\n` +
-      `\`\`\`\n/pay ___Vault___ ${fmtPayAmount(price)}\n\`\`\``,
+      `\`\`\`\n/pay BluqoYT ${fmtPayAmount(price)}\n\`\`\``,
     )
     .addFields({ name: "Total", value: priceStr, inline: true });
 }
@@ -320,7 +320,7 @@ function startPaymentPoll(channelId: string, guildId: string, userId: string, pr
             .setColor(SUCCESS_COLOR)
             .setTitle("✅ Payment Received!")
             .setDescription(
-              `**${priceStr}** has been received by \`___Vault___\`.\n\n` +
+              `**${priceStr}** has been received by \`BluqoYT\`.\n\n` +
               `Base balance: \`$${fmtNum(baseBalance)}\` → Current: \`$${fmtNum(current)}\`\n\n` +
               `Thank you! Your build will now begin.`,
             )
@@ -5402,7 +5402,7 @@ function farmTicketPanelEmbed() {
     .setTitle("Building Services")
     .setDescription([
       "**Building Service Rules**",
-      "Always pay **`___Vault___`** and not the builder",
+      "Always pay **`BluqoYT`** and not the builder",
       "If bot fails to track payment send an uncropped screenshot",
       "If the base is raided under 3 days you get a 25% refund",
       "Failure to comply with these rules result in a no refund situation",
